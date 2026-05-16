@@ -1,0 +1,51 @@
+# === IDE & Editor ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Claude Code ===
+.claude/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# === 大型模型权重 ===
+*.pth
+
+# === 数据集图片 (隐私 + 体积) ===
+recognition/data/**
+!recognition/data/data.yaml
+
+# === 训练输出 ===
+recognition/runs/
+
+# === 字体文件 (版权) ===
+*.ttc
+*.ttf
+
+# === 虚拟环境 ===
+venv/
+.venv/
+env/
+.env/
+
+# === 系统文件 ===
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# === DLL / 二进制 ===
+*.dll
+*.so
+*.dylib
+
+# === 日志与临时文件 ===
+*.log
+*.tmp

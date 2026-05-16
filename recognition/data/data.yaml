@@ -1,0 +1,13 @@
+train: C:/Users/Liu/PycharmProjects/PythonProject2/recognition/data/train/images
+val: C:/Users/Liu/PycharmProjects/PythonProject2/recognition/data/valid/images
+test: C:/Users/Liu/PycharmProjects/PythonProject2/recognition/data/test/images
+
+nc: 14
+names: ['b_che', 'b_jiang', 'b_ma', 'b_pao', 'b_shi', 'b_xiang', 'b_zu', 'r_bing', 'r_che', 'r_ma', 'r_pao', 'r_shi', 'r_shuai', 'r_xiang']
+
+roboflow:
+  workspace: myrobot-wuh2o
+  project: chess-robot-pose
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/myrobot-wuh2o/chess-robot-pose/dataset/2

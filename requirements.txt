@@ -1,0 +1,13 @@
+# === 深度学习 ===
+torch>=2.0.0
+ultralytics>=8.0.0
+
+# === 计算机视觉 ===
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# === GUI ===
+PyQt5>=5.15.0
+
+# === 硬件驱动 (Windows only) ===
+# CH347DLLA64.DLL 需手动放入项目根目录
