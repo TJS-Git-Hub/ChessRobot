@@ -6,7 +6,8 @@
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-green.svg)](https://opencv.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-一套完整的**人机对弈象棋机器人系统**。使用摄像头实时感知人类走棋，CNN 深度神经网络决策 AI 走法，四自由度机械臂自动执子。
+一套完整的**人机对弈象棋机器人系统**。使用摄像头实时感知人类走棋，CNN 深度神经网络决策 AI 走法，四自由度机械臂自动执子。项目演示视频：
+https://www.bilibili.com/video/BV1aXLn6HEQd/?spm_id_from=333.1387.homepage.video_card.click&vd_source=90ff580afa5b6c963be9a4a3e7281e14
 
 A complete **human-vs-robot Chinese Chess system**: real-time camera perception, CNN-based AI decision-making, and a 4-DOF robotic arm for autonomous piece movement.
 
