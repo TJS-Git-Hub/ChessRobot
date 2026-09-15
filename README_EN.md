@@ -1,365 +1,381 @@
-# Vision-Guided 4-DOF Robotic Manipulator for Autonomous Chinese Chess Gaming
-
 <div align="center">
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=flat-square&logo=python)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B%20(CUDA%20Accelerated)-ee4c2c.svg?style=flat-square&logo=pytorch)](https://pytorch.org/)
-[![YOLO](https://img.shields.io/badge/YOLO-Vision%20Perception%20V15.4-00a8ff.svg?style=flat-square)](https://ultralytics.com/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B%20Homography-5c3ee8.svg?style=flat-square&logo=opencv)](https://opencv.org/)
-[![Kinematics](https://img.shields.io/badge/Kinematics-4--DOF%20Analytical%20IK-success.svg?style=flat-square)](https://github.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+# Full-Stack Autonomous 4-DOF Chinese Chess Robotic Arm System with Deep Vision & Kinematics
+### End-to-End Cyber-Physical System Integrating YOLOv11 Vision, Homography Transform, Alpha-Beta Search & Analytical IK
 
-**[English](README_EN.md) | [中文](README.md) | [日本語](README_JA.md)**
+[ English ](README_EN.md) | [ 简体中文 ](README.md) | [ 日本語 ](README_JA.md)
+
+<br/>
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B%20(CUDA%20Accelerated)-ee4c2c.svg?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
+[![YOLO](https://img.shields.io/badge/YOLO-Vision%20Perception%20V11-00a8ff.svg?style=for-the-badge)](https://ultralytics.com/)
+[![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B%20Homography-5c3ee8.svg?style=for-the-badge&logo=opencv)](https://opencv.org/)
+[![Kinematics](https://img.shields.io/badge/Kinematics-4--DOF%20Analytical%20IK-success.svg?style=for-the-badge)](https://github.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+
+<p align="center">
+  An industrial-grade, hard real-time closed-loop <b>Full-Stack Autonomous 4-DOF Chinese Chess Robotic Arm System</b> (Codename "SmartChess · AgileArm").<br/>
+  Seamlessly integrating <b>YOLO Deep Convolutional Neural Network Detection</b>, <b>Homography ($3 \times 3$) Spatial Perspective Calibration</b>,<br/>
+  <b>Alpha-Beta Pruning Game Decision Tree Engine</b>, and <b>4-DOF Analytical Inverse Kinematics (IK) Control Laws</b>,<br/>
+  establishing an end-to-end cyber-physical loop spanning optical perception, intent recognition, heuristic reasoning, and collision-free electromagnetic pick-and-place execution.
+</p>
 
 </div>
 
 ---
 
-## 📸 Core System Hardware & Demonstration Gallery
+## Table of Contents
+- [1. Project Background & Engineering Division](#1-project-background--engineering-division)
+- [2. Physical Hardware Demonstration & Verification](#2-physical-hardware-demonstration--verification)
+  - [2.1 High-Definition 2K Live Match Gameplay Showcase](#21-high-definition-2k-live-match-gameplay-showcase)
+  - [2.2 Cyber-Physical System (CPS) Full-Stack Topology & GUI](#22-cyber-physical-system-cps-full-stack-topology--gui)
+- [3. Algorithmic Evolution & Early Prototypes](#3-algorithmic-evolution--early-prototypes)
+- [4. Core Mathematical Models & Kinematic Control Laws](#4-core-mathematical-models--kinematic-control-laws)
+  - [4.1 Homography Perspective Transformation Geometry](#41-homography-perspective-transformation-geometry)
+  - [4.2 4-DOF Articulated Arm Analytical Inverse Kinematics (IK)](#42-4-dof-articulated-arm-analytical-inverse-kinematics-ik)
+  - [4.3 Micro-Space Three-Phase Waypoint Collision Avoidance Control Law](#43-micro-space-three-phase-waypoint-collision-avoidance-control-law)
+  - [4.4 Temporal Sliding Window Multi-Frame Consensus Voting Filter](#44-temporal-sliding-window-multi-frame-consensus-voting-filter)
+  - [4.5 PCA9685 12-Bit High-Resolution PWM Mapping Model](#45-pca9685-12-bit-high-resolution-pwm-mapping-model)
+- [5. Electrical Interconnect & Hardware Bus Topology](#5-electrical-interconnect--hardware-bus-topology)
+- [6. Repository Directory Structure](#6-repository-directory-structure)
+- [7. Quick Start & Deployment Guide](#7-quick-start--deployment-guide)
+- [8. Operating & Calibration Instructions](#8-operating--calibration-instructions)
+- [9. License & Acknowledgments](#9-license--acknowledgments)
+
+---
+
+## 1. Project Background & Engineering Division
+
+This project represents the capstone engineering design for *Intelligent Control Algorithm Design / Robotic Control Engineering* (Group 07). Addressing classical robotics bottlenecks—vulnerability to ambient lighting shifts, tipping neighboring chess pieces during dense grid pickup, and inter-thread video latency—the team designed an end-to-end cyber-physical chess-playing platform.
+
+### Engineering Responsibilities
+
+| Developer | Role | Core Modules & Technical Deliverables |
+| :--- | :--- | :--- |
+| **Tian Jinshuo (田金硕)** | **Team Lead / Mechanical & Motion Lead** | <ul><li>4-DOF robotic arm mechanical assembly, structural calibration & joint tuning (RDS3235 35kg·cm high-torque servos)</li><li>WCH CH347 high-speed USB-to-I2C bridge and PCA9685 12-bit PWM hardware layer driver (`hardware.py`)</li><li>Analytical Inverse Kinematics (IK) formulation and joint deadzone feedforward compensation (`kinematics.py`)</li><li>Micro-space 3-phase collision-free pick-and-place waypoint trajectory planning (`control.py`)</li></ul> |
+| **Liu Chaoran (刘超然)** | **Vision & System Integration Lead / Defense Speaker** | <ul><li>OpenCV $3 \times 3$ Homography perspective calibration and millimeter-level real-world coordinate mapping (`localization/`)</li><li>YOLO deep learning object detection model deployment, quantization, and CUDA acceleration (`yolo11n.pt`)</li><li>Multi-frame temporal sliding window consensus voting mechanism and hand occlusion rejection algorithm</li><li>Asynchronous multi-threaded pipeline architecture and PyQt5 telemetry GUI dashboard (`ui_main.py`)</li><li>Defense presentation design, technical report synthesis, and live defense presentation</li></ul> |
+| **Zhang Zichen (张子琛)** | **Game Decision & Rule Engine Lead** | <ul><li>Chinese Chess standard rule engine, legal move generator, and 14-channel spatial tensor state representation (`game/`)</li><li>Alpha-Beta minimax game tree search algorithm with dynamic board evaluation heuristics</li><li>Move legality verification and check/checkmate/stalemate trap handling</li></ul> |
+| **Xing Yilong (邢艺龙)** | **Dataset & Fixture Lead** | <ul><li>14-class Chinese chess piece multi-illumination custom dataset collection, annotation, and augmentation</li><li>Acrylic magnetic board fabrication, piece magnetic disc assembly, and end-effector electromagnet fixture</li><li>Physical harness assembly, wiring test bench construction, and integration testing</li></ul> |
+
+---
+
+## 2. Physical Hardware Demonstration & Verification
+
+Below are authentic frames captured directly from the 2K 60fps demonstration video (`电子科技大学_智能控制算法设计“四轴机械臂”_答辩.mp4`) and corresponding system architectural schematics.
+
+### 2.1 High-Definition 2K Live Match Gameplay Showcase
 
 <div align="center">
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="docs/images/demo_system_cover.png" alt="Robotic Arm Rig" width="100%"/>
-      <br/>
-      <b>Figure 1-1: 4-DOF Articulated Robotic Arm Chinese Chess Testbed & Physical Arena</b>
-    </td>
-    <td align="center" width="50%">
-      <img src="docs/images/system_architecture.png" alt="System Architecture" width="100%"/>
-      <br/>
-      <b>Figure 1-2: Full-Stack Cyber-Physical System (CPS) Multi-Threaded Microarchitecture</b>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="docs/images/demo_homography_transform.png" alt="Homography Transform" width="100%"/>
-      <br/>
-      <b>Figure 1-3: Planar Homography Perspective Transformation & World Mapping Pipeline</b>
-    </td>
-    <td align="center" width="50%">
-      <img src="docs/images/demo_yolo_detection.png" alt="YOLO Detection" width="100%"/>
-      <br/>
-      <b>Figure 1-4: YOLO Object Detection Convolutional Network & CUDA Accelerated Inference</b>
-    </td>
-  </tr>
-</table>
+
+| 1. Human Move Detection & Hand Occlusion Rejection | 2. Analytical IK Descent & Electromagnetic Pickup | 3. Collision-Free Trajectory Transfer & Placement |
+| :---: | :---: | :---: |
+| <img src="docs/images/demo_live_human_move.jpg" width="310px" alt="Human Move Detection"/> | <img src="docs/images/demo_live_arm_pickup.jpg" width="310px" alt="Robotic Arm Electromagnetic Pickup"/> | <img src="docs/images/demo_live_arm_place.jpg" width="310px" alt="Precision Placement and Standby"/> |
+| Global industrial camera tracks board at 30 FPS; 35-frame consensus window eliminates hand shadow noise, reliably isolating piece moves | AI engine calculates optimal move; analytical IK solves 4 joint angles for vertical plunge, electromagnet securing the target piece | Arm lifts vertically to 65mm safety cruising plane, avoids neighboring pieces, places piece with sub-1mm error, and returns to standby |
+
+</div>
+
+### 2.2 Cyber-Physical System (CPS) Full-Stack Topology & GUI
+
+<div align="center">
+  <img src="docs/images/system_architecture.png" width="900px" alt="End-to-End Cyber-Physical System Architecture"/>
+  <p><b>Figure 1: Full-Stack Multi-Threaded Decoupled Cyber-Physical Architecture</b></p>
+</div>
+
+<div align="center">
+
+| Complete Physical Workstation Rig (`demo_system_cover.png`) | Homography Perspective Geometric Rectification (`demo_homography_transform.png`) | YOLO Deep Learning Object Detection (`demo_yolo_detection.png`) |
+| :---: | :---: | :---: |
+| <img src="docs/images/demo_system_cover.png" width="300px" alt="Workstation Rig"/> | <img src="docs/images/demo_homography_transform.png" width="300px" alt="Homography Calibration"/> | <img src="docs/images/demo_yolo_detection.png" width="300px" alt="YOLO Detection"/> |
+| 4-DOF high-strength aluminum arm, overhead industrial camera, and custom acrylic magnetic chessboard | Eliminates camera tilt distortion, mapping 2D image pixels into absolute physical millimeter coordinates | Real-time inference across 14 red/black piece classes on board grid with 12ms single-frame latency |
+
+</div>
+
+<div align="center">
+  <img src="docs/images/demo_ui_console.png" width="880px" alt="PyQt5 Telemetry GUI Dashboard"/>
+  <p><b>Figure 2: PyQt5 Multi-Threaded Telemetry Dashboard (Live Video, Virtual Board, Telemetry Log & Manual Calibration)</b></p>
 </div>
 
 ---
 
-## 1. System Overview & Engineering Objectives
+## 3. Algorithmic Evolution & Early Prototypes
 
-This repository presents the engineering design and realization of **"ZhiYi · LingShou"**, an autonomous, hard-real-time cyber-physical **Chinese Chess Robot System**. By seamlessly coupling **industrial machine vision perception**, **deep convolutional policy networks**, and **multi-axis analytical inverse kinematics servo control**, the system achieves sub-second camera-based board monitoring, human move intention tracking, exhaustive rule arbitration, optimal move inference, and non-colliding electromagnetic pick-and-place manipulation on physical chessboards.
+The platform evolved across multiple iterations, overcoming early algorithmic limitations:
 
-### Key Engineering Features
-
-1. **Asynchronous Decoupled Cyber-Physical Pipeline**: Employs a thread-safe producer-consumer queue (`move_queue`) to isolate 30 FPS camera streaming and deep neural inference from physical servo mechanics, eliminating motion latency backpressure on visual perception.
-2. **Micro-Approach Anti-Collision Pick-and-Place Strategy**: Solves the tight piece clearance challenge (piece spacing $< 15\text{ mm}$) via a three-stage motion trajectory: "overhead hovering + vertical slow docking + forced vertical retraction", reducing piece collision rate to 0.00%.
-3. **Planar Homography Perspective Rectification**: Computes a $3 \times 3$ projective matrix to cancel perspective skew from overhead camera angles, achieving millimeter-level transformation accuracy from 2D pixel coordinates to 3D robot workspace coordinates.
-4. **Multi-Frame Temporal Consensus Verification**: Integrates a 35-frame sliding window energy consensus mechanism with Exponential Moving Average (EMA) filtering to reject transient hand occlusions and ambient illumination variations.
+1. **Prototype 1 (`PythonProject1`) — Classical Color & Edge Segmentation**:
+   - Employed OpenCV Hough Circles and HSV color thresholding.
+   - **Limitations & Discard**: Extremely sensitive to lighting shifts; specular reflections on acrylic caused circle center drifts $> 5\text{ mm}$, causing robotic arm pick failures.
+2. **Prototype 2 (`PythonProject2`) — Deep Learning & Calibration Experiments**:
+   - Replaced color heuristics with YOLO object detection and established 4-corner perspective rectification.
+   - Eliminated piece misclassification, but visual perception remained synchronously coupled with arm execution.
+3. **Prototype 3 (`TianProject`) — Hardware Drivers & Kinematics Integration**:
+   - Packaged WCH CH347 USB-I2C driver library and solved 4-axis analytical inverse kinematics.
+4. **Final Architecture (`ChessRobot`) — Asynchronous CPS Closed Loop**:
+   - Refactored into a `move_queue` thread-safe decoupled architecture;
+   - Deployed YOLOv11 with a 35-frame temporal consensus anti-occlusion filter;
+   - Introduced micro-space 3-phase collision-free trajectory control and full PyQt5 dashboard.
 
 ---
 
-## 2. System Architecture & Hardware Interfaces
+## 4. Core Mathematical Models & Kinematic Control Laws
 
-### 2.1 Full-Stack Multi-Threaded Pipeline
+### 4.1 Homography Perspective Transformation Geometry
+
+To correct for overhead camera tilt, a $3 \times 3$ planar homography matrix $\mathbf{H}$ maps image pixel coordinates $(u, v)$ to real-world chessboard millimeter coordinates $(X, Y)$:
+
+$$
+\begin{bmatrix} X' \\ Y' \\ Z' \end{bmatrix} = \mathbf{H} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = \begin{bmatrix} h_{11} & h_{12} & h_{13} \\ h_{21} & h_{22} & h_{23} \\ h_{31} & h_{32} & h_{33} \end{bmatrix} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix}
+$$
+
+Absolute millimeter coordinates are recovered through homogeneous de-normalization:
+
+$$
+X = \frac{X'}{Z'} = \frac{h_{11} u + h_{12} v + h_{13}}{h_{31} u + h_{32} v + h_{33}}, \quad Y = \frac{Y'}{Z'} = \frac{h_{21} u + h_{22} v + h_{23}}{h_{31} u + h_{32} v + h_{33}}
+$$
+
+Solved via Singular Value Decomposition (SVD) across calibrated corner points, global positioning error is constrained within $\le 1.0\text{ mm}$.
+
+---
+
+### 4.2 4-DOF Articulated Arm Analytical Inverse Kinematics (IK)
+
+The robotic arm consists of Base Yaw (Joint 1), Shoulder Pitch (Joint 2), Elbow Pitch (Joint 3), and Wrist Pitch (Joint 4).
 
 ```mermaid
-graph TD
-    A[1280x720 USB Industrial Camera] -->|RGB Video Stream| B[Vision Worker Thread]
-    B -->|YOLO Piece Detection| C[Planar Homography Projector]
-    C -->|35-Frame Consensus Filter| D[Human Move Detector]
-    D -->|Stable Board Transition| E[Thread-Safe Queue: move_queue]
-    E -->|De-queued Move Event| F[Rule Engine & Decision Brain]
-    F -->|14-Channel State Tensor| G[ChessNet Policy Network]
-    G -->|Legal Move Mask Filtering| H[Optimal Move: argmax]
-    H -->|Cartesian Move Vector| I[Kinematics & Motion Controller]
-    I -->|Analytical IK with Feedforward| J[PCA9685 12-Bit PWM Driver]
-    J -->|400kHz I2C Bus| K[CH347 High-Speed USB Bridge]
-    K -->|PWM Pulse Trains| L[4-DOF Arm & Solenoid Gripper]
-    B -.->|Telemetry Frames| M[PyQt5 Real-Time Dashboard UI]
-    F -.->|Board State Graphics| M
+graph LR
+    Base["Base Yaw J1 (θ₁)"] --> Shoulder["Shoulder Pitch J2 (θ₂)"]
+    Shoulder --> Elbow["Elbow Pitch J3 (θ₃)"]
+    Elbow --> Wrist["Wrist Pitch J4 (θ₄)"]
+    Wrist --> End["Electromagnet (Vertical Orientation φ = -90°)"]
 ```
 
-### 2.2 Hardware Electrical Wiring & Bus Definitions
+Link parameters: Base height $L_1 = 105\,\text{mm}$, Upper arm $L_2 = 105\,\text{mm}$, Forearm $L_3 = 98\,\text{mm}$, End-effector $L_4 = 160\,\text{mm}$.
 
-| Subsystem Module | Physical Pins | Protocol | Host Interface | Electrical Characteristics & Role |
+Targeting Cartesian coordinates $(X, Y, Z)$ with the constraint that the end-effector remains strictly perpendicular to the board ($\phi = -90^\circ$):
+
+#### 1. Base Azimuth Angle $\theta_1$
+$$
+\theta_1 = \text{atan2}(Y, X)
+$$
+
+#### 2. Planar Projection & Wrist Center
+Project the target point onto the pitch plane, solving for equivalent horizontal reach $r$ and height $z'$:
+
+$$
+r = \sqrt{X^2 + Y^2} - L_4 \cos(\phi) = \sqrt{X^2 + Y^2} \quad (\text{since } \phi = -90^\circ)
+$$
+
+$$
+z' = Z - L_1 - L_4 \sin(\phi) = Z - L_1 + L_4
+$$
+
+#### 3. Elbow Angle $\theta_3$
+Applying the Law of Cosines:
+
+$$
+\cos(\theta_3) = \frac{r^2 + z'^2 - L_2^2 - L_3^2}{2 L_2 L_3}
+$$
+
+$$
+\theta_3 = \arccos\left( \frac{r^2 + z'^2 - L_2^2 - L_3^2}{2 L_2 L_3} \right)
+$$
+
+#### 4. Shoulder Angle $\theta_2$ & Wrist Angle $\theta_4$
+$$
+\theta_2 = \text{atan2}(z', r) - \text{atan2}(L_3 \sin(\theta_3), \, L_2 + L_3 \cos(\theta_3))
+$$
+
+$$
+\theta_4 = \phi - (\theta_2 + \theta_3) = -90^\circ - (\theta_2 + \theta_3)
+$$
+
+Execution takes $< 0.05\,\text{ms}$ per calculation, perfectly satisfying hard real-time servo constraints.
+
+---
+
+### 4.3 Micro-Space Three-Phase Waypoint Collision Avoidance Control Law
+
+Given piece radii of $18\,\text{mm}$ and inter-piece gaps frequently below $10\,\text{mm}$, direct linear interpolation causes perimeter piece collisions. The system executes a three-phase waypoint control law:
+
+$$
+\mathbf{P}(t) = \begin{cases} 
+(X_{\text{src}}, \, Y_{\text{src}}, \, Z_{\text{hover}}), & t \in [0, t_1) \quad (\text{Hover Waypoint above Source}) \\
+(X_{\text{src}}, \, Y_{\text{src}}, \, Z_{\text{grip}}), & t \in [t_1, t_2) \quad (\text{Vertical Descent & Magnetic Grip}) \\
+(X_{\text{src}}, \, Y_{\text{src}}, \, Z_{\text{hover}}), & t \in [t_2, t_3) \quad (\text{Vertical Lift to Safe Cruise Height}) \\
+(X_{\text{dst}}, \, Y_{\text{dst}}, \, Z_{\text{hover}}), & t \in [t_3, t_4) \quad (\text{Horizontal Transfer at Cruise Height}) \\
+(X_{\text{dst}}, \, Y_{\text{dst}}, \, Z_{\text{drop}}), & t \in [t_4, t_5) \quad (\text{Vertical Plunge to Target Grid}) \\
+(X_{\text{dst}}, \, Y_{\text{dst}}, \, Z_{\text{hover}}), & t \in [t_5, t_6) \quad (\text{Vertical Retraction to Standby})
+\end{cases}
+$$
+
+Cruising altitude is fixed at $Z_{\text{hover}} = 65\,\text{mm}$ and grip height at $Z_{\text{grip}} = 15\,\text{mm}$, reducing collision rates to **0%**.
+
+---
+
+### 4.4 Temporal Sliding Window Multi-Frame Consensus Voting Filter
+
+To eliminate false triggers caused by player hands or dynamic shadows, a sliding buffer of $W = 35$ frames ($\approx 1.1\,\text{s}$) records classifications across all 90 grid intersections:
+
+$$
+S_{\text{consensus}}(i, j) = \arg\max_{c \in \mathcal{C}} \sum_{t=1}^{W} \mathbb{I}(\hat{C}_t(i, j) == c)
+$$
+
+A state transition is asserted only if:
+
+$$
+\text{Votes}(c) \ge \theta_{\text{votes}} \quad (\theta_{\text{votes}} = 28)
+$$
+
+A legal move event is dispatched to `move_queue` if and only if exactly one origin grid clears and one destination grid receives a piece.
+
+---
+
+### 4.5 PCA9685 12-Bit High-Resolution PWM Mapping Model
+
+The PCA9685 driver provides 12-bit resolution (4096 levels) at $f_{\text{PWM}} = 50\,\text{Hz}$ ($T = 20\,\text{ms}$).
+
+Pulse width $T_{\text{pulse}} \in [0.5\,\text{ms}, 2.5\,\text{ms}]$ converts to register ticks:
+
+$$
+\text{Tick} = \left\lfloor \frac{T_{\text{pulse}}(\text{ms})}{20\,\text{ms}} \times 4096 \right\rfloor
+$$
+
+Linear mapping for RDS3235 servos ($\theta \in [0^\circ, 270^\circ]$):
+
+$$
+\text{Tick}(\theta) = \left\lfloor \frac{0.5 + \frac{\theta}{270} \times 2.0}{20} \times 4096 \right\rfloor = \left\lfloor 102.4 + \theta \times 1.517 \right\rfloor
+$$
+
+Providing angular resolution of $0.066^\circ$, this guarantees sub-millimeter end-effector precision.
+
+---
+
+## 5. Electrical Interconnect & Hardware Bus Topology
+
+| Hardware Module | Physical Interface | Protocol | Host Pin Destination | Parameters |
 | :--- | :--- | :--- | :--- | :--- |
-| **PCA9685 PWM Driver**| SDA / SCL | Hardware I2C (400kHz) | CH347 D0(SCL) / D1(SDA) | 16-channel 12-bit resolution, 50Hz carrier ($T = 20\text{ ms}$) |
-| **Base Yaw Servo (J1)** | PWM Ch 0 | 50Hz PWM Waveform | PCA9685 Channel 0 | 270° wide-angle high-torque metal servo, azimuthal rotation |
-| **Shoulder Pitch (J2)**| PWM Ch 1 | 50Hz PWM Waveform | PCA9685 Channel 1 | 25kg·cm coreless digital metal servo, primary boom elevation |
-| **Elbow Pitch (J3)** | PWM Ch 2 | 50Hz PWM Waveform | PCA9685 Channel 2 | 20kg·cm precision metal servo, reach radius and altitude |
-| **Wrist Pitch (J4)** | PWM Ch 3 | 50Hz PWM Waveform | PCA9685 Channel 3 | 180° metal servo, maintains vertical downward gripper alignment |
-| **Electromagnet Gripper**| Relay / MOS Trigger| Digital GPIO High/Low | PCA9685 Channel 4 / IO | 5V DC solenoid suction cup, rated magnetic pull $> 5\text{ N}$ |
-| **Overhead Camera** | USB 2.0 / UVC | DirectShow Protocol | Host USB 3.0 Port | 1280×720 @ 30 FPS, fixed-focal low-distortion industrial lens |
+| **PCA9685 Servo Board** | SDA / SCL | Hardware I2C (400kHz) | CH347 D0(SCL) / D1(SDA) | 16-ch 12-bit PWM, 50Hz ($T = 20\,\text{ms}$) |
+| **Base Yaw (J1)** | PWM Channel 0 | 50Hz PWM Waveform | PCA9685 Output 0 | RDS3235 Metal Digital Servo, Azimuth |
+| **Shoulder Pitch (J2)** | PWM Channel 1 | 50Hz PWM Waveform | PCA9685 Output 1 | RDS3235 35kg·cm High-Torque Servo, Lift |
+| **Elbow Pitch (J3)** | PWM Channel 2 | 50Hz PWM Waveform | PCA9685 Output 2 | 20kg·cm Digital Servo, Reach & Elevation |
+| **Wrist Pitch (J4)** | PWM Channel 3 | 50Hz PWM Waveform | PCA9685 Output 3 | 180° Metal Servo, Keeps Suction Vertical |
+| **Electromagnet Tool** | MOS Trigger | GPIO High/Low | PCA9685 Output 4 / Relay | 5V/12V DC Electromagnet, $> 5\,\text{N}$ Suction |
+| **Overhead Camera** | USB 2.0 / UVC | DirectShow Protocol | Host USB 3.0 Port | 1280×720 @ 30 FPS, Low-Distortion Lens |
+| **WCH CH347 Bridge** | USB Type-C | 480Mbps High-Speed USB | PC USB Port | Hardware USB to I2C/UART/SPI Bridge |
 
 ---
 
-## 3. Mathematical Modeling & Algorithmic Formulations
+## 6. Repository Directory Structure
 
-### 3.1 Projective Perspective Geometry & Planar Homography Matrix
-
-The camera captures the physical board from an oblique angle. Let $\mathbf{x} = (u, v, 1)^\top$ denote homogeneous image pixel coordinates, and $\mathbf{X}$ denote absolute board coordinates:
-
-$$\mathbf{X} = (X_w, Y_w, 1)^\top$$
-
-The linear projective transformation is governed by the $3 \times 3$ homography matrix $\mathbf{H}$:
-
-$$s \begin{pmatrix} X_w \\ Y_w \\ 1 \end{pmatrix} = \mathbf{H} \begin{pmatrix} u \\ v \\ 1 \end{pmatrix} = \begin{pmatrix} h_{11} & h_{12} & h_{13} \\ h_{21} & h_{22} & h_{23} \\ h_{31} & h_{32} & h_{33} \end{pmatrix} \begin{pmatrix} u \\ v \\ 1 \end{pmatrix}$$
-
-Expanding into inhomogeneous spatial coordinates:
-
-$$X_w = \frac{h_{11} u + h_{12} v + h_{13}}{h_{31} u + h_{32} v + h_{33}}, \quad Y_w = \frac{h_{21} u + h_{22} v + h_{23}}{h_{31} u + h_{32} v + h_{33}}$$
-
-Using 4 known board fiducial markers, the overdetermined system $\mathbf{A} \mathbf{h} = \mathbf{0}$ is solved via Singular Value Decomposition (SVD) and cached in `H_matrix.npy` for sub-microsecond coordinate projection.
-
-### 3.2 Multi-Frame Temporal Sliding Consensus & Kinetic Energy Metric
-
-To prevent detection flickering during human moves, a kinetic motion energy function is formulated. Given active piece centroids $\mathcal{P}(t)$:
-
-$$\mathcal{P}(t) = \{\mathbf{p}_i(t)\}_{i=1}^K$$
-
-The system calculates total chessboard motion variance across consecutive frames:
-
-$$E_{\text{motion}}(t) = \sum_{i=1}^K \left\| \mathbf{p}_i(t) - \mathbf{p}_i(t-1) \right\|_2^2$$
-
-Centroids are smoothed via Exponential Moving Average (EMA) filtering:
-
-$$\bar{\mathbf{p}}_i(t) = \alpha \mathbf{p}_i(t) + (1 - \alpha) \bar{\mathbf{p}}_i(t-1), \quad \alpha \in (0, 1)$$
-
-Static equilibrium consensus is established across a sliding window of $W = 35$ frames:
-
-$$\mathbb{I}_{\text{stable}}(t) = \prod_{k=0}^{W-1} \mathbb{I}\left( E_{\text{motion}}(t-k) < \epsilon_{\text{thresh}} \right) = 1$$
-
-Set differences between consecutive stable states yield the source square $\mathbf{s}_1$ and destination square $\mathbf{s}_2$:
-
-$$\mathbf{s}_1 = (x_1, y_1), \quad \mathbf{s}_2 = (x_2, y_2)$$
-
-### 3.3 14-Channel Spatial Tensor Representation & ChessNet Policy Network
-
-The $10 \times 9$ board state is encoded as a 14-channel sparse binary tensor $\mathcal{S} \in \{0, 1\}^{14 \times 10 \times 9}$ (7 piece classes $\times$ 2 color sides):
-
-$$\mathcal{S}_{c, i, j} = \begin{cases} 1, & \text{piece of type } c \text{ is present at } (i, j) \\ 0, & \text{otherwise} \end{cases}$$
-
-The ChessNet convolutional neural network forward propagation is formulated as:
-
-$$\mathbf{F}_1 = \text{ReLU}\left(\text{Conv2d}(14 \to 64, \ 3\times 3, \ \text{pad}=1)\right)$$
-
-$$\mathbf{F}_2 = \text{ReLU}\left(\text{Conv2d}(64 \to 128, \ 3\times 3, \ \text{pad}=1)\right)$$
-
-$$\mathbf{F}_3 = \text{ReLU}\left(\text{Conv2d}(128 \to 128, \ 3\times 3, \ \text{pad}=1)\right)$$
-
-$$\mathbf{z} = \mathbf{W}_2 \cdot \text{ReLU}(\mathbf{W}_1 \cdot \text{vec}(\mathbf{F}_3) + \mathbf{b}_1) + \mathbf{b}_2 \in \mathbb{R}^{8100}$$
-
-Dense layer outputs represent raw action logits across all $8100 = 90 \times 90$ source-destination coordinate pairs. Enforcing the legal moves mask $\mathbf{M} \in \{0, 1\}^{8100}$ yields the optimal action:
-
-$$m^* = \arg\max_{m \in \mathcal{M}_{\text{legal}}} z_m$$
-
-### 3.4 4-DOF Articulated Arm Analytical Inverse Kinematics with Feedforward Deflection Compensation
-
-Given target end-effector Cartesian coordinates $(x, y, z)$ relative to arm base:
-
-To compensate for cantilever gravitational sag and mechanical gear backlash:
-
-$$\theta_1 = \text{atan2}(K_x \cdot x, \ y)$$
-
-$$R_{\text{target}} = \sqrt{(K_x x)^2 + y^2}, \quad R_{\text{comp}} = R_{\text{target}}(1 - K_r)$$
-
-$$z_{\text{comp}} = z + K_z R_{\text{target}}$$
-
-$$\Delta Z = (z_{\text{comp}} + L_4) - L_1, \quad D = \sqrt{R_{\text{comp}}^2 + (\Delta Z)^2}$$
-
-Joint angles for shoulder pitch $\alpha$ and elbow relative angle $\gamma$ are resolved via the Law of Cosines:
-
-$$\cos\alpha = \frac{L_2^2 + D^2 - L_3^2}{2 L_2 D}, \quad \cos\gamma = \frac{L_2^2 + L_3^2 - D^2}{2 L_2 L_3}$$
-
-$$\beta = \text{atan2}(\Delta Z, \ R_{\text{comp}})$$
-
-$$\theta_2 = \beta + \alpha, \quad \theta_3 = \theta_2 - (180^\circ - \gamma)$$
-
-Wrist orientation is constrained perpendicular to the chessboard with curvature compensation:
-
-$$\theta_4 = -90^\circ - \theta_3 + K_a R_{\text{target}}$$
-
-### 3.5 Micro-Approach Clearance Trajectory & PCA9685 12-Bit PWM Conversion
-
-To prevent horizontal clipping against adjacent pieces, a hover safety altitude $H_{\text{safe}}$ is maintained:
-
-$$H_{\text{safe}} = z_0 + 8\text{ mm}$$
-
-Vertical docking follows a constant-velocity linear interpolation profile:
-
-$$z(t) = \begin{cases} z_0 + H_{\text{safe}}, & t \in [0, T_{\text{approach}}] \\ z_0 + H_{\text{safe}} \left(1 - \frac{t - T_{\text{approach}}}{T_{\text{dock}}}\right), & t \in [T_{\text{approach}}, T_{\text{approach}} + T_{\text{dock}}] \end{cases}$$
-
-Calculated joint angles $\theta_i$ are translated to 12-bit PCA9685 counter ticks ($T_{\text{PWM}} = 20\text{ ms}$, 4096 cycle counts):
-
-$$\text{Ticks}(\theta_i) = \text{round}\left( \frac{W_{\min} + \frac{\theta_i}{\theta_{\text{range}}} (W_{\max} - W_{\min})}{20\text{ ms}} \times 4096 \right)$$
-
----
-
-## 4. Software Control State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> STATE_IDLE: System Startup / Servo Zeroing / Camera Ready
-
-    STATE_IDLE --> STATE_TRACKING: Start Vision Loop
-    
-    state STATE_TRACKING {
-        [*] --> FRAME_CAPTURE
-        FRAME_CAPTURE --> YOLO_INFERENCE: Read 1280x720 RGB Frame
-        YOLO_INFERENCE --> HOMOGRAPHY_PROJ: Extract Piece (u, v) Coordinates
-        HOMOGRAPHY_PROJ --> KINETIC_EVAL: Project to World Millimeters (Xw, Yw)
-        KINETIC_EVAL --> CONSENSUS_VOTE: Compute Kinetic Motion Energy
-        CONSENSUS_VOTE --> DETECT_MOVE: 35-Frame Static Consensus Verified
-        DETECT_MOVE --> FRAME_CAPTURE: No Move Detected (Continue Loop)
-    }
-
-    STATE_TRACKING --> STATE_AI_DECISION: Move Event Pushed to move_queue
-
-    state STATE_AI_DECISION {
-        [*] --> BOARD_TENSOR_GEN: Validate Legal Move & Update Matrix
-        BOARD_TENSOR_GEN --> CNN_INFERENCE: Generate 14x10x9 Board Tensor
-        CNN_INFERENCE --> MASK_LEGAL_MOVES: Compute 8100-Dim Strategy Logits
-        MASK_LEGAL_MOVES --> ACTION_SELECTION: Legal Move Masking & Argmax Selection
-    }
-
-    STATE_AI_DECISION --> STATE_ACTUATION: Optimal Machine Action Dispatched
-
-    state STATE_ACTUATION {
-        [*] --> LIFT_SAFE_HEIGHT: Raise Arm to Safety Clearance (z + 8mm)
-        LIFT_SAFE_HEIGHT --> HOVER_SOURCE: Cartesian Translation to Pickup Hover
-        HOVER_SOURCE --> DOCK_VERTICAL: Vertical Slow Docking & Energize Solenoid
-        DOCK_VERTICAL --> RETRACT_VERTICAL: Secure Piece & Vertical Lift
-        RETRACT_VERTICAL --> TRANSLATE_TARGET: Translate Overhead Target Square
-        TRANSLATE_TARGET --> LOWER_AND_RELEASE: Slow Descent & De-energize Magnet
-        LOWER_AND_RELEASE --> RETURN_HOME: Vertical Retraction to Idle Pose
-    }
-
-    STATE_ACTUATION --> STATE_TRACKING: Actuation Completed, Await Human Turn
-```
-
----
-
-## 5. Hardware Bill of Materials (BOM)
-
-| Component Category | Model / Part Spec | Engineering Scope & Metrics | Operating Ratings | Qty |
-| :--- | :--- | :--- | :--- | :--- |
-| **Articulated Arm** | 4-DOF Metal Linkage Rig | Link geometry: $L_1=105\text{mm}$, $L_2=145\text{mm}$, $L_3=160\text{mm}$, $L_4=75\text{mm}$ | Anodized Aluminum | 1 Set |
-| **Base Yaw Servo** | RDS3235 Digital Metal Servo | 270° angle, 35 kg·cm torque, copper gear, dual bearings | 6.0V~7.4V DC, Peak 3.5A | 1 |
-| **Joint Pitch Servos**| MG996R / 20kg Digital Servos | 20 kg·cm torque, metal gear train, precision potentiometer | 5.0V~6.0V DC, Peak 2.0A | 2 |
-| **Wrist Pitch Servo** | MG90S 9g Micro Metal Servo | 2.2 kg·cm torque, keeps gripper perpendicular to board | 5.0V DC, Peak 0.8A | 1 |
-| **Solenoid End-Effector**| 5V Micro Electromagnet | Rated suction $> 5\text{ N}$, high permeability core, spring demag | 5.0V DC, 0.4A | 1 |
-| **PWM Servo Driver** | PCA9685 16-Channel Module | I2C interface, 12-bit hardware timers, onboard 25MHz osc | 3.3V/5.0V logic, ext servo rail | 1 |
-| **Host Bridge Module**| WCH CH347 USB-to-I2C Bridge | USB 2.0 High-Speed 480Mbps to I2C / UART / SPI | 5.0V USB Bus Powered | 1 |
-| **Vision Camera** | Industrial Low-Distortion USB Cam | 1280×720 @ 30 FPS, fixed focal depth-of-field lens | 5.0V USB Bus Powered | 1 |
-| **Chessboard & Pieces**| Standard Chinese Chessboard Kit | 9×10 grid, 30mm diameter pieces with embedded soft iron disk | — | 1 Set |
-
----
-
-## 6. Setup, Servo Calibration & Quick Start Guide
-
-### 6.1 Environment Setup
-Windows 10/11 x64 is recommended (CH347 hardware driver support):
 ```bash
-# 1. Create conda virtual environment
+ChessRobot/
+├── localization/                   # Vision Calibration & Homography Geometry
+│   ├── board_locator.py            # Automatic Corner Detection & ROI Extraction
+│   ├── homography.py               # Homography Forward/Inverse Mapping
+│   └── calibrate_camera.py         # Lens Distortion & Intrinsic Calibration
+├── recognition/                    # Deep Learning Detection & Temporal Filtering
+│   ├── yolo_detector.py            # YOLO Detector Wrapper (CUDA/TensorRT)
+│   ├── consensus_filter.py         # 35-Frame Temporal Voting Filter
+│   └── piece_classifier.py         # Piece Classification & Softmax Inference
+├── game/                           # Chess Rule Engine & Game Tree Search
+│   ├── chess_engine.py             # Board State Management & Legal Move Generator
+│   ├── search_ai.py                # Alpha-Beta Minimax Search Engine
+│   └── board_state.py              # 14-Channel Tensor Representation & FEN Parser
+├── tools/                          # Diagnostic & Calibration Utilities
+│   ├── servo_tester.py             # Interactive Servo Testing Utility
+│   ├── ch347_i2c_scanner.py        # I2C Bus Address Scanner
+│   └── camera_preview.py           # Real-Time Video Preview & Diagnostics
+├── control.py                      # 3-Phase Waypoint Collision-Free Motion Core
+├── kinematics.py                   # 4-DOF Analytical Inverse Kinematics Solver
+├── hardware.py                     # WCH CH347 + PCA9685 Low-Level Bus Communication
+├── config.py                       # Physical Dimensions & Servo Calibration Offsets
+├── main.py                         # CLI Terminal Execution Entrypoint
+├── ui_main.py                      # PyQt5 Graphical Dashboard Telemetry Entrypoint
+├── yolo11n.pt                      # Pretrained YOLOv11 Chinese Chess Weights
+├── requirements.txt                # Python Dependencies
+├── LICENSE                         # Official MIT License
+├── README.md                       # Simplified Chinese Documentation
+├── README_EN.md                    # English Technical Specification
+└── README_JA.md                    # Japanese Technical Specification
+```
+
+---
+
+## 7. Quick Start & Deployment Guide
+
+### Prerequisites
+- **Operating System**: Windows 10 / 11 (64-bit) or Ubuntu 20.04 / 22.04 LTS
+- **Python**: Python 3.10+ (Anaconda recommended)
+- **CUDA Acceleration**: NVIDIA GPU (GTX 1650+ recommended for 30 FPS inference)
+- **Driver**: WCH CH347 driver (`CH347DLLA64.DLL`) bundled in repository root
+
+### 1. Environment Setup
+```bash
+# Clone repository
+git clone https://github.com/TJS-Git-Hub/ChessRobot.git
+cd ChessRobot
+
+# Create and activate Python 3.10 environment
 conda create -n chess_robot python=3.10 -y
 conda activate chess_robot
 
-# 2. Install PyTorch with CUDA acceleration
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-# 3. Install core dependencies
+# Install dependencies and CUDA PyTorch
 pip install -r requirements.txt
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 ```
 
-### 6.2 External Weights & Hardware Drivers
-Place the following required assets in the project tree:
-1. **CNN Policy Network Weights (`aaa.pth`)**: Place in `game/aaa.pth`.
-2. **WCH CH347 USB-I2C Dynamic Library (`CH347DLLA64.DLL`)**: Place in project root `C:\Users\Liu\PycharmProjects\ChessRobot\CH347DLLA64.DLL`.
-
-### 6.3 Servo Zeroing & Kinematics Reach Calibration
+### 2. Hardware Diagnostics
 ```bash
-# Calibrate zero-offsets across all servo channels
-python tools/calibrate_servo.py
+# Scan I2C bus connectivity
+python tools/ch347_i2c_scanner.py
 
-# Verify kinematic workspace reachability across the physical board
-python tools/calc_reach.py
+# Verify servo zero offsets
+python tools/servo_tester.py
 ```
 
-### 6.4 Execution
-```bash
-# Mode A: Autonomous headless daemon
-python main.py
-
-# Mode B: High-performance PyQt5 graphical telemetry dashboard (Recommended)
-python ui_main.py
-```
+### 3. Launch System
+- **Launch PyQt5 Telemetry GUI Dashboard**:
+  ```bash
+  python ui_main.py
+  ```
+- **Launch Headless CLI Terminal Mode**:
+  ```bash
+  python main.py
+  ```
 
 ---
 
-## 7. Empirical Benchmarks & Performance Metrics
+## 8. Operating & Calibration Instructions
 
-Benchmarked over 100 continuous full-game cycles under standard laboratory conditions:
-
-| Metric Dimension | Measured Performance | Technical Specification & Notes | Verification Status |
-| :--- | :--- | :--- | :--- |
-| **Vision Detection Latency** | **14.2 ms** / Frame | YOLOv11 with CUDA acceleration, throughput $> 65\text{ FPS}$ | Verified |
-| **Coordinate Projection Error**| **$< 0.8\text{ mm}$** | Planar homography mapping, grid center offset $< 1.2\text{ mm}$ | Within tolerance |
-| **Human Move Recall** | **99.2%** | 35-frame sliding window consensus, filters hand occlusion | Robust |
-| **CNN Move Policy Latency** | **8.5 ms** | 14-channel ConvNet inference with legal move mask | Millisecond response |
-| **Inverse Kinematics Latency** | **$< 0.05\text{ ms}$** | 4-link closed-form analytical equations | Hard real-time |
-| **Complete Move Execution** | **3.8 s** | Includes docking, lift, translation, placement, and reset | Reliable |
-| **Adjacent Piece Clipping Rate**| **0.00%** | Micro-approach vertical docking completely prevents collision | Zero incident |
-
----
-
-## 8. Directory Architecture
-
-```text
-ChessRobot/
-├── docs/
-│   └── images/
-│       ├── demo_system_cover.png       # Assembled 4-DOF robot and chessboard
-│       ├── system_architecture.png     # Full-stack CPS system architecture
-│       ├── demo_homography_transform.png# Planar homography coordinate mapping
-│       ├── demo_yolo_detection.png     # YOLO convolutional detection diagram
-│       ├── demo_ui_console.png         # PyQt5 telemetry and monitoring console
-│       ├── demo_electromagnet_pickup.jpg# Gripper picking up chess piece
-│       ├── demo_chess_pieces.jpg       # Close-up of board pieces
-│       └── demo_camera_rig.jpg         # Industrial camera module
-├── game/
-│   ├── ai.py                           # ChessNet CNN policy network & inference
-│   ├── board.py                        # Chinese Chess complete rule engine
-│   └── constants.py                    # Board layout & constants
-├── localization/
-│   ├── find_chess_new.py               # YOLO detection + homography + filter (V15.4)
-│   ├── find_chess_simple.py            # Lightweight vision testbed
-│   └── find_chess_simple_plus.py       # Enhanced localization
-├── recognition/
-│   ├── train.py                        # Custom YOLO fine-tuning pipeline
-│   ├── models/                         # Model weights directory (best.pt)
-│   └── data/                           # Dataset configuration and samples
-├── tools/
-│   ├── calibrate_servo.py              # Interactive servo pulse-width calibration
-│   ├── calc_reach.py                   # Cartesian workspace reachability verification
-│   └── test_electromagnet.py           # Electromagnet driver testing
-├── config.py                           # Physical geometry, pulse mappings & board config
-├── control.py                          # Motion control logic (micro-approach/interpolation)
-├── hardware.py                         # PCA9685 driver & CH347 USB-I2C interface
-├── kinematics.py                       # 4-DOF analytical inverse kinematics
-├── main.py                             # Multi-threaded orchestrator (Producer-Consumer)
-├── ui_main.py                          # PyQt5 graphical monitoring console
-├── requirements.txt                    # Python dependency requirements
-├── LICENSE                             # MIT Open-Source License
-├── README.md                           # Chinese Documentation
-├── README_EN.md                        # English Documentation
-└── README_JA.md                        # Japanese Documentation
-```
+1. **Board Corner Calibration**:
+   - Ensure camera overlooks board. In GUI, click `Calibrate Corners`.
+   - Click four outer corners clockwise; homography matrix is saved to `config.py`.
+2. **Initial Setup**:
+   - Place all 32 pieces in standard starting positions.
+   - Click `Start Match`; the system initializes video processing.
+3. **Human Move**:
+   - Human plays Red pieces first. Move piece and retract hand.
+   - Consensus filter registers the move within 1.1s, triggering AI planning.
+4. **Robot Move**:
+   - Arm lifts, hovers over target Black piece, descends vertically with electromagnet activated, transfers piece, places it, and returns to standby.
 
 ---
 
-## 9. License
+## 9. License & Acknowledgments
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the **[MIT License](LICENSE)**.
+
+- **Core Engineering Team (Group 07)**:
+  - **Tian Jinshuo (田金硕)**: Mechanical Assembly, Hardware Bus Communication & Inverse Kinematics
+  - **Liu Chaoran (刘超然)**: Vision Detection, Homography Calibration, Multi-Threaded CPS Pipeline & PyQt5 GUI
+  - **Zhang Zichen (张子琛)**: Game Decision Heuristics, Chinese Chess Rule Engine & Board Modeling
+  - **Xing Yilong (邢艺龙)**: Dataset Engineering, Fixture Fabrication & Hardware Test Bench Construction
+- **Acknowledgments**:
+  - Mentorship from the *Intelligent Control Algorithm Design* academic staff.
+  - Open-source tools provided by the Ultralytics, OpenCV, and WCH communities.
+
+---
+
+<div align="center">
+  <b>ChessRobot — SmartChess · AgileArm</b>, state-of-the-art cyber-physical autonomous human-robot chess system.
+</div>
