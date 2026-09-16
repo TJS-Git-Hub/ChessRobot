@@ -11,7 +11,8 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B%20(CUDA%20Accelerated)-ee4c2c.svg?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
 [![YOLO](https://img.shields.io/badge/YOLO-Vision%20Perception%20V11-00a8ff.svg?style=for-the-badge)](https://ultralytics.com/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B%20Homography-5c3ee8.svg?style=for-the-badge&logo=opencv)](https://opencv.org/)
-[![Kinematics](https://img.shields.io/badge/Kinematics-4--DOF%20Analytical%20IK-success.svg?style=for-the-badge)](https://github.com/)
+[![Kinematics](https://img.shields.io/badge/Kinematics-4--DOF%20Analytical%20IK-success.svg?style=for-the-badge)](https://github/)
+[![Bilibili: Live Demo](https://img.shields.io/badge/Bilibili-Live%20Demo-fb7299?style=for-the-badge&logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1aXLn6HEQd)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 <p align="center">
@@ -63,6 +64,10 @@
 ## 2. 実機デモと全流路ハードウェア検証
 
 以下は、2K 60fps 実機対局検証動画（`电子科技大学_智能控制算法设计“四轴机械臂”_答辩.mp4`）から抽出した動的対局動作とシステム構成です。
+
+* 完全な 2K 60fps 実機人機対局全閉ループ動的デモ動画は Bilibili にて公開されています：  
+  👉 **[Bilibili で実機デモ動画を視聴する：4自由度中国将棋対局ロボット端到端閉ループ実戦検証](https://www.bilibili.com/video/BV1aXLn6HEQd)**  
+  *(人の着手視覚認識、ホモグラフィ透視変換幾何補正、Alpha-Beta 探索による最適着手解算、4軸解析的逆運動学制御、および電磁石による高精度ピック＆プレースを網羅)*
 
 ### 2.1 2K 高解像度実機対局ダイナミクス実証
 

@@ -12,6 +12,7 @@
 [![YOLO](https://img.shields.io/badge/YOLO-Vision%20Perception%20V11-00a8ff.svg?style=for-the-badge)](https://ultralytics.com/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B%20Homography-5c3ee8.svg?style=for-the-badge&logo=opencv)](https://opencv.org/)
 [![Kinematics](https://img.shields.io/badge/Kinematics-4--DOF%20Analytical%20IK-success.svg?style=for-the-badge)](https://github.com/)
+[![Bilibili: Live Demo](https://img.shields.io/badge/Bilibili-Live%20Demo-fb7299?style=for-the-badge&logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1aXLn6HEQd)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 <p align="center">
@@ -63,6 +64,10 @@
 ## 2. 硬件实机演示与全链路验证
 
 以下展示从 2K 60fps 实机对弈演示视频（`电子科技大学_智能控制算法设计“四轴机械臂”_答辩.mp4`）中截取的真实动态对弈过程，以及系统的底层信息物理系统（CPS）架构与交互控制台。
+
+* 完整 2K 60fps 实机人机对弈全闭环动态演示视频已发布在 Bilibili：  
+  👉 **[点击观看实机演示视频：四自由度象棋对弈机器人端到端闭环实战](https://www.bilibili.com/video/BV1aXLn6HEQd)**  
+  *(完整演示人类落子视觉感知、单应性透视校正、Alpha-Beta 决策解算、4 轴解析逆运动学规划及电磁防碰撞精准拾放全流程)*
 
 ### 2.1 2K 高清实机动态对弈过程展示
 

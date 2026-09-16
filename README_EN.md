@@ -12,6 +12,7 @@
 [![YOLO](https://img.shields.io/badge/YOLO-Vision%20Perception%20V11-00a8ff.svg?style=for-the-badge)](https://ultralytics.com/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B%20Homography-5c3ee8.svg?style=for-the-badge&logo=opencv)](https://opencv.org/)
 [![Kinematics](https://img.shields.io/badge/Kinematics-4--DOF%20Analytical%20IK-success.svg?style=for-the-badge)](https://github.com/)
+[![Bilibili: Live Demo](https://img.shields.io/badge/Bilibili-Live%20Demo-fb7299?style=for-the-badge&logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1aXLn6HEQd)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 <p align="center">
@@ -63,6 +64,10 @@ This project represents the capstone engineering design for *Intelligent Control
 ## 2. Physical Hardware Demonstration & Verification
 
 Below are authentic frames captured directly from the 2K 60fps demonstration video (`电子科技大学_智能控制算法设计“四轴机械臂”_答辩.mp4`) and corresponding system architectural schematics.
+
+* The complete 2K 60fps full-loop autonomous gameplay demonstration video is available on Bilibili:  
+  👉 **[Watch Live Demo on Bilibili: Full-Stack Autonomous 4-DOF Chinese Chess Robotic Arm Closed-Loop Match](https://www.bilibili.com/video/BV1aXLn6HEQd)**  
+  *(Demonstrating human move perception, Homography transform, Alpha-Beta heuristic decision, 4-DOF analytical IK trajectory planning, and electromagnetic pick-and-place)*
 
 ### 2.1 High-Definition 2K Live Match Gameplay Showcase
 
