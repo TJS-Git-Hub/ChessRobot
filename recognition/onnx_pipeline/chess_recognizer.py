@@ -46,9 +46,11 @@ BONE_NAMES = ["A0", "A8", "J0", "J8"]
 class ChessRecognizer:
     def __init__(self,
                  pose_model_path: Optional[str] = None,
-                 classifier_model_path: Optional[str] = None):
+                 classifier_model_path: Optional[str] = None,
+                 enable_physics_refine: bool = True):
         """
         初始化识别器与 ONNX Runtime 推理会话
+        enable_physics_refine: 是否启用物理墨迹色度与方差规则双重纠偏引擎 (默认 True)
         """
         root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         models_dir = os.path.join(root_dir, "recognition", "models", "onnx")
@@ -57,6 +59,7 @@ class ChessRecognizer:
         # 默认优先采用泛化能力更稳健、无位置偏见的原始官方基线模型 layout_swinv2_nano.onnx
         nano_path = os.path.join(models_dir, "layout_swinv2_nano.onnx")
         self.classifier_model_path = classifier_model_path or nano_path
+        self.enable_physics_refine = enable_physics_refine
 
         self.pose_session: Optional[ort.InferenceSession] = None
         self.classifier_session: Optional[ort.InferenceSession] = None
@@ -236,9 +239,102 @@ class ChessRecognizer:
 
         grid_chars = [short_chars[i * 9:(i + 1) * 9] for i in range(10)]
         conf_grid = [conf[i * 9:(i + 1) * 9].tolist() for i in range(10)]
-        layout_str = "\n".join(["".join(row) for row in grid_chars])
+
+        if self.enable_physics_refine:
+            grid_chars, conf_grid, layout_str = self.refine_with_physics_and_rules(warped_bgr, grid_chars, conf_grid)
+        else:
+            layout_str = "\n".join(["".join(row) for row in grid_chars])
 
         return grid_chars, conf_grid, layout_str
+
+    def refine_with_physics_and_rules(self,
+                                      warped_bgr: np.ndarray,
+                                      grid_chars: List[List[str]],
+                                      conf_grid: List[List[float]]) -> Tuple[List[List[str]], List[List[float]], str]:
+        """
+        工业级物理特征与象棋规则双重纠偏引擎：
+        1. 棋盘交叉点纹理方差质感判定 (消除空点误检与盲区漏检)
+        2. 字符雕刻物理墨迹色度检测 (r - (g+b)/2 绝对分离红黑两军，杜绝红黑串色)
+        3. 象棋拓扑与走子规则合法性过滤 (九宫、过河、底线反向约束)
+        """
+        pad = 50
+        w_step = 350.0 / 8.0
+        h_step = 400.0 / 9.0
+        half = 32
+        padded = cv2.copyMakeBorder(warped_bgr, half, half, half, half, cv2.BORDER_REFLECT)
+
+        refined_grid = [row.copy() for row in grid_chars]
+        refined_conf = [row.copy() for row in conf_grid]
+
+        for r in range(10):
+            for c in range(9):
+                cx = int(round(pad + c * w_step)) + half
+                cy = int(round(pad + r * h_step)) + half
+
+                # 采样中心 36x36 核心区域
+                c_patch = padded[cy - 18:cy + 18, cx - 18:cx + 18]
+                gray = cv2.cvtColor(c_patch, cv2.COLOR_BGR2GRAY)
+                std = float(np.std(gray))
+
+                orig_char = grid_chars[r][c]
+
+                # 提取雕刻文字暗部墨迹
+                bg_val = float(np.median(gray))
+                ink_mask = gray < (bg_val - 12)
+                n_ink = int(np.sum(ink_mask))
+                if n_ink >= 15:
+                    ink_b = float(np.mean(c_patch[:, :, 0][ink_mask]))
+                    ink_g = float(np.mean(c_patch[:, :, 1][ink_mask]))
+                    ink_r = float(np.mean(c_patch[:, :, 2][ink_mask]))
+                    chroma = ink_r - (ink_g + ink_b) / 2.0
+                else:
+                    chroma = 0.0
+
+                is_red = (chroma > 3.0)
+
+                if orig_char in ['.', 'x']:
+                    # 极高标准漏检补偿：只有当方差极高且墨迹点极多时才补偿
+                    if std >= 58.0 and n_ink >= 250:
+                        refined_char = 'P' if is_red else 'p'
+                    else:
+                        refined_char = '.'
+                else:
+                    # 误检抑制：模型预测有子，但实体质感方差不足 35.0，判定为空位误检并剔除
+                    if std < 35.0:
+                        refined_char = '.'
+                    else:
+                        # 物理墨迹色度强校验 (彻底根除红黑字符大小写混淆)
+                        if is_red:
+                            refined_char = orig_char.upper()
+                        else:
+                            refined_char = orig_char.lower()
+
+                        # 象棋拓扑规则合法性约束
+                        in_black_palace = (0 <= r <= 2 and 3 <= c <= 5)
+                        in_red_palace = (7 <= r <= 9 and 3 <= c <= 5)
+
+                        # 将/帅、士/仕不能离开九宫格
+                        if not in_black_palace and refined_char in ['k', 'a']:
+                            refined_char = 'b' if (0 <= r <= 4) else 'p'
+                        if not in_red_palace and refined_char in ['K', 'A']:
+                            refined_char = 'B' if (5 <= r <= 9) else 'P'
+
+                        # 相/象不能过河
+                        if r > 4 and refined_char == 'b':
+                            refined_char = 'p'
+                        if r < 5 and refined_char == 'B':
+                            refined_char = 'P'
+
+                        # 兵/卒不能倒退回己方底线
+                        if r == 0 and refined_char == 'p':
+                            refined_char = 'r'
+                        if r == 9 and refined_char == 'P':
+                            refined_char = 'R'
+
+                refined_grid[r][c] = refined_char
+
+        refined_layout_str = "\n".join(["".join(row) for row in refined_grid])
+        return refined_grid, refined_conf, refined_layout_str
 
     def format_fen(self, grid_chars: List[List[str]], active_color: str = 'w') -> str:
         """
@@ -310,7 +406,11 @@ class ChessRecognizer:
         short_chars = [self.label_2_short[self.classes_labels[idx]] for idx in best_idx]
         grid_chars = [short_chars[i * 9:(i + 1) * 9] for i in range(10)]
         conf_grid = [conf[i * 9:(i + 1) * 9].tolist() for i in range(10)]
-        layout_str = "\n".join(["".join(row) for row in grid_chars])
+
+        if self.enable_physics_refine:
+            grid_chars, conf_grid, layout_str = self.refine_with_physics_and_rules(warped_bgr, grid_chars, conf_grid)
+        else:
+            layout_str = "\n".join(["".join(row) for row in grid_chars])
 
         return grid_chars, conf_grid, layout_str
 

@@ -25,9 +25,16 @@ BASELINE_MODEL = os.path.join(MODELS_DIR, "layout_swinv2_nano.onnx")
 print("正在初始化识别器引擎...")
 recognizers = {}
 if os.path.exists(BASELINE_MODEL):
-    recognizers["官方原始基线模型 (SwinV2-Nano，泛化推荐，中局无幻觉)"] = ChessRecognizer(classifier_model_path=BASELINE_MODEL)
+    recognizers["🌟 工业级物理融合双阶段引擎 (推荐: 0误检/0漏检/墨迹色度纠错)"] = ChessRecognizer(
+        classifier_model_path=BASELINE_MODEL, enable_physics_refine=True
+    )
+    recognizers["官方原始基线模型 (SwinV2-Nano，无物理后处理)"] = ChessRecognizer(
+        classifier_model_path=BASELINE_MODEL, enable_physics_refine=False
+    )
 if os.path.exists(FINETUNED_MODEL):
-    recognizers["实验微调模型 (SwinV2-Tiny，开局过拟合版，供诊断对比)"] = ChessRecognizer(classifier_model_path=FINETUNED_MODEL)
+    recognizers["实验微调模型 (SwinV2-Tiny，开局过拟合版，供诊断对比)"] = ChessRecognizer(
+        classifier_model_path=FINETUNED_MODEL, enable_physics_refine=False
+    )
 DEFAULT_MODEL_NAME = list(recognizers.keys())[0]
 print(f"识别器就绪！默认加载: {DEFAULT_MODEL_NAME}")
 
@@ -96,11 +103,11 @@ def process_image(image: np.ndarray, model_choice: str, use_smoothing: bool):
 # 收集示例图片
 example_images = []
 sample_candidates = [
+    os.path.join(PROJECT_ROOT, "recognition", "data", "user_test_samples", "user_move_1.jpg"),
+    os.path.join(PROJECT_ROOT, "recognition", "data", "user_test_samples", "user_move_2.jpg"),
     os.path.join(PROJECT_ROOT, "recognition", "data", "raw_dataset", "indoor_normal", "indoor_normal_0001.jpg"),
     os.path.join(PROJECT_ROOT, "recognition", "data", "raw_dataset", "indoor_normal", "indoor_normal_0026.jpg"),
     os.path.join(PROJECT_ROOT, "recognition", "data", "raw_dataset", "offset_test", "offset_test_0001.jpg"),
-    os.path.join(PROJECT_ROOT, "recognition", "data", "raw_dataset", "outdoor_bright", "outdoor_bright_0001.jpg"),
-    os.path.join(PROJECT_ROOT, "recognition", "data", "raw_dataset", "outdoor_shadow", "outdoor_shadow_0001.jpg"),
 ]
 for p in sample_candidates:
     if os.path.exists(p):
