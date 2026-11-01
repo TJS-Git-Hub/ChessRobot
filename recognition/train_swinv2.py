@@ -63,11 +63,11 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     os.makedirs(models_onnx_dir, exist_ok=True)
 
-    # 3. 超参数配置
-    EPOCHS = 35
+    # 3. 超参数配置 (基于已有高分模型进行大偏心针对性强化)
+    EPOCHS = 25
     BATCH_SIZE = 16
     SAMPLES_PER_EPOCH = 1280  # 80 batches per epoch
-    LR = 1.5e-4
+    LR = 8.0e-5  # 平滑微调学习率
     WEIGHT_DECAY = 1e-2
 
     print(f"📊 [训练配置] 总轮数 (Epochs): {EPOCHS}")
@@ -100,9 +100,15 @@ def main():
         pin_memory=True
     )
 
-    # 5. 模型初始化
-    print("🔹 [模型就绪] 正在加载 Swin Transformer V2 Tiny 骨干网络预训练权重...")
-    model = ChessBoardRecognizer(pretrained=True).to(device)
+    # 5. 模型初始化 (优先加载上一轮 92.5% 的最佳权重进行增量强化)
+    best_model_path = os.path.join(project_root, "recognition", "best_layout_swinv2.pth")
+    if os.path.exists(best_model_path):
+        print(f"🔹 [增量微调] 成功检测到高分检查点，加载已有最佳权重: {best_model_path}")
+        model = ChessBoardRecognizer(pretrained=False).to(device)
+        model.load_state_dict(torch.load(best_model_path, map_location=device))
+    else:
+        print("🔹 [模型就绪] 正在加载 Swin Transformer V2 Tiny 骨干网络预训练权重...")
+        model = ChessBoardRecognizer(pretrained=True).to(device)
 
     # 6. 损失函数 (空点 0.35 权重，棋子 1.0~1.5 权重，标签平滑 0.08)
     class_weights = torch.ones(16, dtype=torch.float32, device=device)

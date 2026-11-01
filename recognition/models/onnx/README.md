@@ -17,3 +17,4 @@ This directory stores the ONNX inference weights for the ChessRobot computer vis
    - Original baseline open-source layout recognition model.
 
 *Note: Binary `.onnx` model files exceeding 100MB are excluded from GitHub git tracking via `.gitignore`. They are generated locally by `python recognition/train_swinv2.py` or stored in local model storage.*
+

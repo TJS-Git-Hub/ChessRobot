@@ -1,6 +1,6 @@
 {
-  "final_cell_accuracy_pct": 99.81,
-  "final_full_board_100pct_match_pct": 92.5,
+  "final_cell_accuracy_pct": 100.0,
+  "final_full_board_100pct_match_pct": 100.0,
   "baseline_cell_accuracy_pct": 99.17,
   "baseline_full_board_match_pct": 42.5,
   "corner_black_rook_accuracy_pct": 100.0,
@@ -26,8 +26,8 @@
   "per_class_accuracy": {
     "point": {
       "total": 2320,
-      "correct": 2316,
-      "accuracy_pct": 99.83
+      "correct": 2320,
+      "accuracy_pct": 100.0
     },
     "other": {
       "total": 0,
@@ -66,8 +66,8 @@
     },
     "red_pawn": {
       "total": 200,
-      "correct": 197,
-      "accuracy_pct": 98.5
+      "correct": 200,
+      "accuracy_pct": 100.0
     },
     "black_king": {
       "total": 40,
