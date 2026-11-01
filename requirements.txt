@@ -1,6 +1,8 @@
 # === 深度学习 ===
 torch>=2.0.0
 ultralytics>=8.0.0
+onnxruntime>=1.15.0
+
 
 # === 计算机视觉 ===
 opencv-python>=4.8.0

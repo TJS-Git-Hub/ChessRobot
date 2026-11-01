@@ -18,6 +18,7 @@ build/
 
 # === 大型模型权重 ===
 *.pth
+*.onnx
 
 # === 数据集图片 (隐私 + 体积) ===
 recognition/data/**
@@ -49,3 +50,4 @@ desktop.ini
 # === 日志与临时文件 ===
 *.log
 *.tmp
+recognition/training_progress.json

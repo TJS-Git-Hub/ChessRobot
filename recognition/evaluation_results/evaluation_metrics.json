@@ -1,0 +1,108 @@
+{
+  "final_cell_accuracy_pct": 99.81,
+  "final_full_board_100pct_match_pct": 92.5,
+  "baseline_cell_accuracy_pct": 99.17,
+  "baseline_full_board_match_pct": 42.5,
+  "corner_black_rook_accuracy_pct": 100.0,
+  "red_knight_accuracy_pct": 100.0,
+  "classes": [
+    "point",
+    "other",
+    "red_king",
+    "red_advisor",
+    "red_bishop",
+    "red_knight",
+    "red_rook",
+    "red_cannon",
+    "red_pawn",
+    "black_king",
+    "black_advisor",
+    "black_bishop",
+    "black_knight",
+    "black_rook",
+    "black_cannon",
+    "black_pawn"
+  ],
+  "per_class_accuracy": {
+    "point": {
+      "total": 2320,
+      "correct": 2316,
+      "accuracy_pct": 99.83
+    },
+    "other": {
+      "total": 0,
+      "correct": 0,
+      "accuracy_pct": 100.0
+    },
+    "red_king": {
+      "total": 40,
+      "correct": 40,
+      "accuracy_pct": 100.0
+    },
+    "red_advisor": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "red_bishop": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "red_knight": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "red_rook": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "red_cannon": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "red_pawn": {
+      "total": 200,
+      "correct": 197,
+      "accuracy_pct": 98.5
+    },
+    "black_king": {
+      "total": 40,
+      "correct": 40,
+      "accuracy_pct": 100.0
+    },
+    "black_advisor": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "black_bishop": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "black_knight": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "black_rook": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "black_cannon": {
+      "total": 80,
+      "correct": 80,
+      "accuracy_pct": 100.0
+    },
+    "black_pawn": {
+      "total": 200,
+      "correct": 200,
+      "accuracy_pct": 100.0
+    }
+  }
+}
