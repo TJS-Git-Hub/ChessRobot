@@ -54,10 +54,9 @@ class ChessRecognizer:
         models_dir = os.path.join(root_dir, "recognition", "models", "onnx")
 
         self.pose_model_path = pose_model_path or os.path.join(models_dir, "pose_rtmpose_4kpt.onnx")
-        # 优先使用微调后的高性能模型 layout_swinv2_tiny_finetuned.onnx
-        finetuned_path = os.path.join(models_dir, "layout_swinv2_tiny_finetuned.onnx")
-        default_path = finetuned_path if os.path.exists(finetuned_path) else os.path.join(models_dir, "layout_swinv2_nano.onnx")
-        self.classifier_model_path = classifier_model_path or default_path
+        # 默认优先采用泛化能力更稳健、无位置偏见的原始官方基线模型 layout_swinv2_nano.onnx
+        nano_path = os.path.join(models_dir, "layout_swinv2_nano.onnx")
+        self.classifier_model_path = classifier_model_path or nano_path
 
         self.pose_session: Optional[ort.InferenceSession] = None
         self.classifier_session: Optional[ort.InferenceSession] = None

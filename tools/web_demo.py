@@ -23,12 +23,13 @@ FINETUNED_MODEL = os.path.join(MODELS_DIR, "layout_swinv2_tiny_finetuned.onnx")
 BASELINE_MODEL = os.path.join(MODELS_DIR, "layout_swinv2_nano.onnx")
 
 print("正在初始化识别器引擎...")
-recognizers = {
-    "微调增强版 (SwinV2-Tiny, 100%全盘命中, 推荐)": ChessRecognizer(classifier_model_path=FINETUNED_MODEL)
-}
+recognizers = {}
 if os.path.exists(BASELINE_MODEL):
-    recognizers["原始开源基线 (SwinV2-Nano)"] = ChessRecognizer(classifier_model_path=BASELINE_MODEL)
-print("识别器就绪！")
+    recognizers["官方原始基线模型 (SwinV2-Nano，泛化推荐，中局无幻觉)"] = ChessRecognizer(classifier_model_path=BASELINE_MODEL)
+if os.path.exists(FINETUNED_MODEL):
+    recognizers["实验微调模型 (SwinV2-Tiny，开局过拟合版，供诊断对比)"] = ChessRecognizer(classifier_model_path=FINETUNED_MODEL)
+DEFAULT_MODEL_NAME = list(recognizers.keys())[0]
+print(f"识别器就绪！默认加载: {DEFAULT_MODEL_NAME}")
 
 
 # 中文棋子代号映射说明
@@ -49,7 +50,7 @@ def process_image(image: np.ndarray, model_choice: str, use_smoothing: bool):
     # Gradio 传入格式为 RGB，OpenCV 需要 BGR
     img_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-    recognizer = recognizers.get(model_choice, recognizers["微调增强版 (SwinV2-Tiny, 100%全盘命中, 推荐)"])
+    recognizer = recognizers.get(model_choice, recognizers[DEFAULT_MODEL_NAME])
 
     result = recognizer.recognize_full(img_bgr, use_smoothing=use_smoothing)
 
@@ -103,7 +104,7 @@ sample_candidates = [
 ]
 for p in sample_candidates:
     if os.path.exists(p):
-        example_images.append([p, "微调增强版 (SwinV2-Tiny, 100%全盘命中, 推荐)", False])
+        example_images.append([p, DEFAULT_MODEL_NAME, False])
 
 
 # 自定义 CSS 样式
@@ -147,7 +148,7 @@ with gr.Blocks(title="中国象棋盘面与棋子识别交互系统") as demo:
             with gr.Row():
                 model_dropdown = gr.Dropdown(
                     choices=list(recognizers.keys()),
-                    value="微调增强版 (SwinV2-Tiny, 100%全盘命中, 推荐)",
+                    value=DEFAULT_MODEL_NAME,
                     label="选择推理模型"
                 )
                 smoothing_check = gr.Checkbox(
@@ -217,3 +218,4 @@ with gr.Blocks(title="中国象棋盘面与棋子识别交互系统") as demo:
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, share=False)
+
