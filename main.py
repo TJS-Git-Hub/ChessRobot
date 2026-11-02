@@ -264,6 +264,10 @@ class ChessRobotOrchestrator:
                 time.sleep(0.3)
                 self.vision.reset_baseline(self.piece_count)
                 self.vision.suppress_detection = False
+                # 走后闭环消差复核机制 (Post-Move Closed-Loop Verification)
+                if hasattr(self.vision, "post_move_verification"):
+                    piece_type = self.board.board[y2][x2][1] if self.board.board[y2][x2] else ""
+                    self.vision.post_move_verification(to_vis, piece_type)
 
         return True
 
