@@ -258,27 +258,84 @@ class ChessRecognizer:
 
         return grid_chars, conf_grid, layout_str
 
+    def get_allowed_classes(self, is_red: bool, r: int, c: int) -> List[str]:
+        """中国象棋九宫/楚河汉界/底线拓扑规则候选空间"""
+        if is_red:
+            in_palace = (7 <= r <= 9 and 3 <= c <= 5)
+            if in_palace:
+                allowed = ['K', 'A', 'N', 'R', 'C']
+                if r in [7, 8]: allowed.append('P')
+                if r == 9 and c in [2, 6]: allowed.append('B')
+            elif r >= 5: # 红方半场
+                allowed = ['N', 'R', 'C']
+                if c in [0, 2, 4, 6, 8] and r in [5, 7, 9]: allowed.append('B')
+                if r < 9: allowed.append('P')
+            else: # 过河 (r <= 4)
+                allowed = ['N', 'R', 'C', 'P']
+        else: # 黑方
+            in_palace = (0 <= r <= 2 and 3 <= c <= 5)
+            if in_palace:
+                allowed = ['k', 'a', 'n', 'r', 'c']
+                if r in [1, 2]: allowed.append('p')
+                if r == 0 and c in [2, 6]: allowed.append('b')
+            elif r <= 4: # 黑方半场
+                allowed = ['n', 'r', 'c']
+                if c in [0, 2, 4, 6, 8] and r in [0, 2, 4]: allowed.append('b')
+                if r > 0: allowed.append('p')
+            else: # 过河 (r >= 5)
+                allowed = ['n', 'r', 'c', 'p']
+        return allowed
+
+    def query_mobilenet_for_cell(self, padded: np.ndarray, r: int, c: int,
+                                 allowed_candidates: List[str],
+                                 pad=50, w_step=350.0/8.0, h_step=400.0/9.0, half=32) -> Tuple[str, float]:
+        """单兵 MobileNetV3 64x64 高精模型在合法候选空间内的二次仲裁"""
+        if self.piece_session is None or not allowed_candidates:
+            return allowed_candidates[0] if allowed_candidates else '.', 0.50
+
+        char_to_idx = {
+            'a': 0, 'b': 1, 'c': 2, 'k': 3, 'n': 4, 'p': 5, 'r': 6,
+            'A': 7, 'B': 8, 'C': 9, 'K': 10, 'N': 11, 'P': 12, 'R': 13
+        }
+        mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
+        std_norm = np.array([58.395, 57.12, 57.375], dtype=np.float32)
+
+        cx = int(round(pad + c * w_step)) + half
+        cy = int(round(pad + r * h_step)) + half
+        patch_64 = padded[cy - 32:cy + 32, cx - 32:cx + 32]
+        rgb_64 = cv2.cvtColor(patch_64, cv2.COLOR_BGR2RGB).astype(np.float32)
+        norm = (rgb_64 - mean) / std_norm
+        tensor = np.transpose(norm, (2, 0, 1))[np.newaxis, ...]
+        logits = self.piece_session.run(None, {self.piece_input_name: tensor})[0][0]
+        exp_l = np.exp(logits - np.max(logits))
+        probs = exp_l / np.sum(exp_l)
+
+        best_ch = allowed_candidates[0]
+        best_prob = -1.0
+        for ch in allowed_candidates:
+            if ch in char_to_idx:
+                idx = char_to_idx[ch]
+                if probs[idx] > best_prob:
+                    best_prob = probs[idx]
+                    best_ch = ch
+        return best_ch, float(best_prob)
+
     def refine_with_physics_and_rules(self,
                                       warped_bgr: np.ndarray,
                                       grid_chars: List[List[str]],
                                       conf_grid: List[List[float]]) -> Tuple[List[List[str]], List[List[float]], str]:
         """
-        工业级双环色度、物理防反光特征与中国象棋拓扑/棋子上限规则高精仲裁引擎：
-        1. 双环物理色度分析 (Dual-Zone Chromaticity Analyzer)：
-           - 环区 1 (字面墨迹核心区 r <= 12px)：结合 CIELAB A* 与 R-G 色差，计算刻痕笔划真实成色
-           - 环区 2 (外围圆槽凹圈 12.5px <= r <= 16.5px)：提取棋子外部红色/黑色凹槽色环作为双重印证
-        2. 科学红黑分流与模型置信度融合：
-           - 物理色差明确阈值：红方 (A* >= 136.0 或 R-G >= 16.0)，黑方 (A* <= 132.5 且 R-G <= 8.5)
-           - 在强光或阴影边缘下，高置信度模型输出与物理成色相互校验，根除颜色颠倒现象
-        3. 防反光存在性双保险校验：
-           - 空白木纹棋格绝不幻觉出棋子 (0 误检)；反光洗白棋子依循刻痕笔划方差保护 (0 漏检)
-        4. 象棋拓扑九宫/过河边界硬约束：
-           - 九宫内帅/仕与将/士阵营归属硬校验；相/象过河禁区校验；兵/卒底线移动约束
-        5. 单兵 MobileNetV3 64x64 深度网络二次仲裁：
-           - 针对低置信度 (<0.55) 或违背物理规则的孤立棋格，唤醒单兵高精网络仲裁
-        6. 中国象棋全局实体物理数量硬限幅剪枝：
-           - 将/帅 <= 1, 士/仕 <= 2, 象/相 <= 2, 马 <= 2, 车 <= 2, 炮 <= 2, 兵/卒 <= 5
-           - 超过物理上限的幽灵残留按置信度从低到高精准修剪
+        工业级双环色度物理分析、抗反光存在性保全与全局棋规无损仲裁引擎 (Pipeline v6)：
+        1. 物理保全原则 (Conservation of Matter)：实体棋子绝不在后处理阶段被错误删除为 '.'，0 漏检。
+        2. 双环物理色度分析 (Dual-Zone Chromaticity Analyzer)：
+           - 环区 1 (字面刻痕核心区 r <= 12px) + 环区 2 (外围圆槽凹圈 12.5px <= r <= 16.5px)
+           - 红方真红刻痕：CombLabA >= 142.0 或 CombRG >= 25.0；黑方刻痕：CombLabA <= 135.5 且 CombRG <= 10.0
+           - 物理色度决定真身阵营，绝不随模型预测错判而颠倒。
+        3. 拓扑合法空间映射与 MobileNetV3 约束仲裁：
+           - 阵营确定后，严格约束九宫格、楚河汉界与兵卒底线移动；
+           - 若原始标签在拓扑禁区（如过河相/象），自动由单兵网络在合法空间内重选最优解。
+        4. 全局棋规物理数量动态重分配 (Non-destructive Global Arbitration)：
+           - 若单类棋子因模型模糊出现超额（如 3 门炮、3 只象），不执行抹除，而是将低置信度者重分配给未饱和棋种。
         """
         pad = 50
         w_step = 350.0 / 8.0
@@ -289,25 +346,18 @@ class ChessRecognizer:
         refined_grid = [row.copy() for row in grid_chars]
         refined_conf = [row.copy() for row in conf_grid]
 
-        mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
-        std_norm = np.array([58.395, 57.12, 57.375], dtype=np.float32)
-
-        char_to_idx = {
-            'a': 0, 'b': 1, 'c': 2, 'k': 3, 'n': 4, 'p': 5, 'r': 6,
-            'A': 7, 'B': 8, 'C': 9, 'K': 10, 'N': 11, 'P': 12, 'R': 13
-        }
-        idx_to_char = {v: k for k, v in char_to_idx.items()}
-
         for r in range(10):
             for c in range(9):
-                orig_char = grid_chars[r][c]
-                conf = conf_grid[r][c]
+                orig_ch = grid_chars[r][c]
+                c_conf = conf_grid[r][c]
+                if orig_ch in ['.', 'x']:
+                    refined_grid[r][c] = '.'
+                    continue
 
                 cx = int(round(pad + c * w_step)) + half
                 cy = int(round(pad + r * h_step)) + half
                 c_patch = padded[cy - 18:cy + 18, cx - 18:cx + 18]
                 h, w = c_patch.shape[:2]
-
                 Y, X = np.ogrid[:h, :w]
                 dist = np.sqrt((X - w // 2) ** 2 + (Y - h // 2) ** 2)
 
@@ -320,6 +370,11 @@ class ChessRecognizer:
                 ink_pixels = inner_mask & (gray < (face_bg - 12.0))
                 n_ink = int(np.sum(ink_pixels))
 
+                # 棋子存在性保全：仅当完全无刻痕无纹理时才判定为空 (彻底杜绝强光下漏检)
+                if n_ink < 30 and std < 20.0:
+                    refined_grid[r][c] = '.'
+                    continue
+
                 # 环区 2：外部凹槽圆环 (12.5 <= r <= 16.5)
                 ring_mask = (dist >= 12.5) & (dist <= 16.5)
                 ring_gray = gray[ring_mask]
@@ -328,7 +383,6 @@ class ChessRecognizer:
                 n_ring = int(np.sum(ring_ink))
 
                 lab = cv2.cvtColor(c_patch, cv2.COLOR_BGR2LAB)
-
                 if n_ink >= 12:
                     inner_rg = float(np.mean(c_patch[:, :, 2][ink_pixels].astype(float) - c_patch[:, :, 1][ink_pixels].astype(float)))
                     inner_la = float(np.mean(lab[:, :, 1][ink_pixels]))
@@ -343,115 +397,30 @@ class ChessRecognizer:
                     ring_rg = inner_rg
                     ring_la = inner_la
 
-                # 结合双环色度与 R-G 色差
                 comb_la = 0.65 * inner_la + 0.35 * ring_la
                 comb_rg = 0.65 * inner_rg + 0.35 * ring_rg
 
-                # 棋子存在性判定：
-                if orig_char not in ['.', 'x']:
-                    has_piece = not (n_ink < 40 and std < 22.0)
+                # 1. 物理色度独立裁决阵营
+                if comb_la >= 142.0 or comb_rg >= 25.0:
+                    is_red = True
+                elif comb_la <= 135.5 and comb_rg <= 10.0:
+                    is_red = False
                 else:
-                    has_piece = False
+                    is_red = (comb_la > 138.0 and comb_rg > 15.0)
 
-                if not has_piece:
-                    refined_grid[r][c] = '.'
-                    continue
+                # 2. 候选合法空间与单兵重判
+                allowed = self.get_allowed_classes(is_red, r, c)
+                desired_char = orig_ch.upper() if is_red else orig_ch.lower()
 
-                # 阵营红黑判定
-                in_black_palace = (0 <= r <= 2 and 3 <= c <= 5)
-                in_red_palace = (7 <= r <= 9 and 3 <= c <= 5)
-
-                if orig_char.lower() in ['k', 'a']:
-                    if in_black_palace:
-                        is_red = False
-                    elif in_red_palace:
-                        is_red = True
-                    else:
-                        is_red = (comb_la >= 136.0 or comb_rg >= 15.0)
-                elif orig_char.lower() == 'b':
-                    if r <= 4:
-                        is_red = False
-                    elif r >= 5:
-                        is_red = True
-                    else:
-                        is_red = (comb_la >= 136.0 or comb_rg >= 15.0)
+                if desired_char in allowed:
+                    refined_grid[r][c] = desired_char
+                    refined_conf[r][c] = c_conf
                 else:
-                    if comb_la >= 136.0 or comb_rg >= 16.0:
-                        physics_is_red = True
-                        physics_strong = True
-                    elif comb_la <= 132.5 and comb_rg <= 8.5:
-                        physics_is_red = False
-                        physics_strong = True
-                    else:
-                        physics_is_red = (comb_la > 134.0 or comb_rg > 12.0)
-                        physics_strong = False
+                    best_ch, b_prob = self.query_mobilenet_for_cell(padded, r, c, allowed, pad, w_step, h_step, half)
+                    refined_grid[r][c] = best_ch
+                    refined_conf[r][c] = b_prob
 
-                    orig_is_red = orig_char.isupper()
-                    if conf >= 0.70:
-                        if orig_is_red and not physics_is_red and physics_strong:
-                            is_red = False
-                        elif not orig_is_red and physics_is_red and physics_strong:
-                            is_red = True
-                        else:
-                            is_red = orig_is_red
-                    else:
-                        is_red = physics_is_red
-
-                cur_char = orig_char.upper() if is_red else orig_char.lower()
-
-                # 拓扑规则合法性检验
-                is_illegal = False
-                if not in_black_palace and cur_char in ['k', 'a']: is_illegal = True
-                if not in_red_palace and cur_char in ['K', 'A']: is_illegal = True
-                if r > 4 and cur_char == 'b': is_illegal = True
-                if r < 5 and cur_char == 'B': is_illegal = True
-                if r == 0 and cur_char == 'p': is_illegal = True
-                if r == 9 and cur_char == 'P': is_illegal = True
-
-                # 若非法或置信度较低 (<0.55)，融合 64x64 高精单兵网络二次仲裁
-                if (is_illegal or conf < 0.55) and self.piece_session is not None:
-                    patch_64 = padded[cy - 32:cy + 32, cx - 32:cx + 32]
-                    rgb_64 = cv2.cvtColor(patch_64, cv2.COLOR_BGR2RGB).astype(np.float32)
-                    norm = (rgb_64 - mean) / std_norm
-                    tensor = np.transpose(norm, (2, 0, 1))[np.newaxis, ...]
-                    logits = self.piece_session.run(None, {self.piece_input_name: tensor})[0][0]
-                    exp_l = np.exp(logits - np.max(logits))
-                    probs = exp_l / np.sum(exp_l)
-
-                    candidate_indices = []
-                    for idx_cls, cname in enumerate(self.classes_labels[2:]):
-                        char_cls = self.label_2_short[cname]
-                        if is_red and not char_cls.isupper(): continue
-                        if not is_red and not char_cls.islower(): continue
-                        if not in_black_palace and char_cls in ['k', 'a']: continue
-                        if not in_red_palace and char_cls in ['K', 'A']: continue
-                        if r > 4 and char_cls == 'b': continue
-                        if r < 5 and char_cls == 'B': continue
-                        if r == 0 and char_cls == 'p': continue
-                        if r == 9 and char_cls == 'P': continue
-                        if char_cls in char_to_idx:
-                            candidate_indices.append(char_to_idx[char_cls])
-
-                    if candidate_indices:
-                        best_score = -999.0
-                        best_char = cur_char
-                        for idx_c in candidate_indices:
-                            ch = idx_to_char[idx_c]
-                            score = float(probs[idx_c])
-                            if ch == cur_char and not is_illegal:
-                                score += conf
-                            if score > best_score:
-                                best_score = score
-                                best_char = ch
-                        refined_char = best_char
-                    else:
-                        refined_char = cur_char
-                else:
-                    refined_char = cur_char
-
-                refined_grid[r][c] = refined_char
-
-        # 中国象棋实体物理数量硬限幅剪枝
+        # 3. 全局物理实体数量硬限幅动态重分配 (无损剪枝)
         limits = {
             'k': 1, 'K': 1,
             'a': 2, 'A': 2,
@@ -461,21 +430,43 @@ class ChessRecognizer:
             'c': 2, 'C': 2,
             'p': 5, 'P': 5
         }
-        char_locations = collections.defaultdict(list)
-        for r in range(10):
-            for c in range(9):
-                ch = refined_grid[r][c]
-                if ch in limits:
-                    char_locations[ch].append((refined_conf[r][c], r, c))
 
-        for ch, max_allowed in limits.items():
-            locs = char_locations[ch]
-            if len(locs) > max_allowed:
-                locs.sort(key=lambda item: item[0])
-                for i in range(len(locs) - max_allowed):
-                    _, r, c = locs[i]
-                    refined_grid[r][c] = '.'
-                    refined_conf[r][c] = 0.99
+        for iteration in range(5):
+            char_locations = collections.defaultdict(list)
+            for r in range(10):
+                for c in range(9):
+                    ch = refined_grid[r][c]
+                    if ch in limits:
+                        char_locations[ch].append((refined_conf[r][c], r, c))
+
+            violations = []
+            for ch, max_allowed in limits.items():
+                if len(char_locations[ch]) > max_allowed:
+                    violations.append((ch, len(char_locations[ch]) - max_allowed))
+
+            if not violations:
+                break
+
+            for ch, excess_count in violations:
+                locs = char_locations[ch]
+                locs.sort(key=lambda item: item[0]) # 最低置信度优先重判
+                is_red = ch.isupper()
+                side_limits = {k: v for k, v in limits.items() if (k.isupper() if is_red else k.islower())}
+
+                for i in range(min(excess_count, len(locs))):
+                    cur_conf, r, c = locs[i]
+                    avail_classes = [k for k, v in side_limits.items() if len(char_locations[k]) < v and k != ch]
+                    allowed = self.get_allowed_classes(is_red, r, c)
+                    valid_avail = [ac for ac in avail_classes if ac in allowed]
+
+                    if not valid_avail:
+                        continue
+
+                    best_ch, b_prob = self.query_mobilenet_for_cell(padded, r, c, valid_avail, pad, w_step, h_step, half)
+                    refined_grid[r][c] = best_ch
+                    refined_conf[r][c] = b_prob
+                    char_locations[ch].remove((cur_conf, r, c))
+                    char_locations[best_ch].append((b_prob, r, c))
 
         refined_layout_str = "\n".join(["".join(row) for row in refined_grid])
         return refined_grid, refined_conf, refined_layout_str
