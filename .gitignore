@@ -51,3 +51,5 @@ desktop.ini
 *.log
 *.tmp
 recognition/training_progress.json
+scratch/
+test photos/
