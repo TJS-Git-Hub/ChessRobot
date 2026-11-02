@@ -1,9 +1,10 @@
 """No CH347, camera, model, GUI, or physical movement is opened."""
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ast
 import copy
 import importlib
-from pathlib import Path
-import sys
 import threading
 import types
 import unittest
@@ -68,25 +69,27 @@ class Tests(unittest.TestCase):
         self.assertEqual(hw.closed,1);self.assertEqual(hw.moves,[])
         with self.assertRaises(RuntimeError):arm.execute_move(0,0,0)
 
-    def test_unreachable_destination_rejected_before_pickup(self):
+    @patch('time.sleep', return_value=None)
+    def test_unreachable_destination_rejected_before_pickup(self, _sleep):
         import math, config
-        from kinematics import KinematicsSolver
-        scope={'time':types.SimpleNamespace(sleep=lambda _:None),'threading':threading,'math':math,'config':config,'MotionError':RuntimeError}
-        cls=extract('control.py','ChessArmController',scope);hw=FakeHardware()
-        arm=cls(hardware=hw,solver=KinematicsSolver(),auto_home=False)
+        solver = types.SimpleNamespace(solve_ik=lambda x, y, z: None if y > 400 else (0, 0, 0, 0), angle_to_pwm=lambda *a: (1500,)*4)
+        scope = {'time': types.SimpleNamespace(sleep=lambda _: None), 'threading': threading, 'math': math, 'config': config, 'MotionError': RuntimeError}
+        cls = extract('control.py', 'ChessArmController', scope); hw = FakeHardware()
+        arm = cls(hardware=hw, solver=solver, auto_home=False)
         with self.assertRaisesRegex(RuntimeError, 'no pickup started'):
             arm.pick_and_place('a0', 'a9')
-        self.assertEqual(hw.moves,[]);self.assertEqual(hw.magnets,[])
+        self.assertEqual(hw.moves, []); self.assertEqual(hw.magnets, [])
 
-    def test_capture_checks_attacker_before_removing_target(self):
+    @patch('time.sleep', return_value=None)
+    def test_capture_checks_attacker_before_removing_target(self, _sleep):
         import math, config
-        from kinematics import KinematicsSolver
-        scope={'time':types.SimpleNamespace(sleep=lambda _:None),'threading':threading,'math':math,'config':config,'MotionError':RuntimeError}
-        cls=extract('control.py','ChessArmController',scope);hw=FakeHardware()
-        arm=cls(hardware=hw,solver=KinematicsSolver(),auto_home=False)
+        solver = types.SimpleNamespace(solve_ik=lambda x, y, z: None if y > 400 else (0, 0, 0, 0), angle_to_pwm=lambda *a: (1500,)*4)
+        scope = {'time': types.SimpleNamespace(sleep=lambda _: None), 'threading': threading, 'math': math, 'config': config, 'MotionError': RuntimeError}
+        cls = extract('control.py', 'ChessArmController', scope); hw = FakeHardware()
+        arm = cls(hardware=hw, solver=solver, auto_home=False)
         with self.assertRaisesRegex(RuntimeError, 'no pickup started'):
             arm.capture('a9', 'a0')
-        self.assertEqual(hw.moves,[]);self.assertEqual(hw.magnets,[])
+        self.assertEqual(hw.moves, []); self.assertEqual(hw.magnets, [])
 
     def test_failed_robot_action_does_not_commit_board(self):
         scope={'threading':threading,'time':types.SimpleNamespace(sleep=lambda _:None),'print':lambda *a:None}

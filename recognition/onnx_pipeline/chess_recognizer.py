@@ -496,14 +496,154 @@ class ChessRecognizer:
         full_fen = f"{board_fen} {active_color} - - 0 1"
         return full_fen
 
-    def visualize_board(self, warped_bgr: np.ndarray, grid_chars: List[List[str]], conf_grid: List[List[float]]) -> np.ndarray:
+    @staticmethod
+    def _create_annular_kernel(radius: float = 16.5, thickness: float = 2.0, size: int = 41) -> np.ndarray:
+        """创建环形滤波器核（用于亚像素级快速圆形凹槽与边缘互相关）"""
+        kernel = np.zeros((size, size), dtype=np.float32)
+        center = size // 2
+        y, x = np.ogrid[:size, :size]
+        dist = np.sqrt((x - center)**2 + (y - center)**2)
+        ring = np.exp(-0.5 * ((dist - radius) / (thickness / 2.0))**2)
+        ring[dist < radius - thickness * 2] = 0
+        ring[dist > radius + thickness * 2] = 0
+        norm_ring = ring / (np.sum(ring) + 1e-6)
+        return norm_ring
+
+    def detect_piece_offsets(self, warped_bgr: np.ndarray, grid_chars: List[List[str]],
+                             board_width_mm: float = 276.0,
+                             board_height_mm: float = 307.0) -> Dict[str, Dict]:
         """
-        在拉平后的棋盘图像上绘制各个格子的识别结果与置信度
+        亚像素棋子圆心定位与毫米级物理偏置测量算法
+        结合实测棋盘物理尺寸 (276x307mm)，输出每枚棋子的理论网格中心、
+        视觉实测圆心、图像像素偏差以及机械臂坐标系下的毫米物理补偿矢量。
+        """
+        padding = 50.0
+        cell_w = 350.0 / 8.0
+        cell_h = 400.0 / 9.0
+
+        # 毫米/像素比率
+        K_x = board_width_mm / 350.0
+        K_y = board_height_mm / 400.0
+
+        gray = cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (3, 3), 0)
+        gx = cv2.Sobel(blur, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(blur, cv2.CV_32F, 0, 1, ksize=3)
+        edge_mag = np.sqrt(gx**2 + gy**2)
+
+        # 预计算环形核
+        kernels = {r: self._create_annular_kernel(radius=r, thickness=2.0, size=41) for r in [15.5, 16.5, 17.5]}
+
+        col_chars = "abcdefghi"
+        piece_offsets = {}
+
+        for r in range(10):
+            for c in range(9):
+                char = grid_chars[r][c]
+                if char in ['.', 'x']:
+                    continue
+
+                pos_str = f"{col_chars[c]}{r}"
+                cx_nom = padding + c * cell_w
+                cy_nom = padding + r * cell_h
+
+                cx_i = int(round(cx_nom))
+                cy_i = int(round(cy_nom))
+
+                # 局部 50x50 搜索窗口
+                x1 = max(0, cx_i - 25)
+                x2 = min(warped_bgr.shape[1], cx_i + 25)
+                y1 = max(0, cy_i - 25)
+                y2 = min(warped_bgr.shape[0], cy_i + 25)
+                patch_mag = edge_mag[y1:y2, x1:x2]
+
+                local_cx_nom = cx_nom - x1
+                local_cy_nom = cy_nom - y1
+
+                best_score = -1e9
+                best_subpix = (float(local_cx_nom), float(local_cy_nom))
+                best_r = 16.5
+                search_dist = 10.0
+
+                for radius_val, kernel in kernels.items():
+                    resp = cv2.filter2D(patch_mag, -1, kernel)
+                    rx_min = max(0, int(round(local_cx_nom - search_dist)))
+                    rx_max = min(patch_mag.shape[1], int(round(local_cx_nom + search_dist + 1)))
+                    ry_min = max(0, int(round(local_cy_nom - search_dist)))
+                    ry_max = min(patch_mag.shape[0], int(round(local_cy_nom + search_dist + 1)))
+
+                    roi_resp = resp[ry_min:ry_max, rx_min:rx_max]
+                    min_v, max_v, min_loc, max_loc = cv2.minMaxLoc(roi_resp)
+
+                    if max_v > best_score:
+                        best_score = max_v
+                        best_r = radius_val
+                        peak_x = rx_min + max_loc[0]
+                        peak_y = ry_min + max_loc[1]
+
+                        # 亚像素二次抛物面极值拟合
+                        if 1 <= peak_x < patch_mag.shape[1] - 1 and 1 <= peak_y < patch_mag.shape[0] - 1:
+                            dx = (resp[peak_y, peak_x + 1] - resp[peak_y, peak_x - 1]) / 2.0
+                            dy = (resp[peak_y + 1, peak_x] - resp[peak_y - 1, peak_x]) / 2.0
+                            dxx = resp[peak_y, peak_x + 1] - 2 * resp[peak_y, peak_x] + resp[peak_y, peak_x - 1]
+                            dyy = resp[peak_y + 1, peak_x] - 2 * resp[peak_y, peak_x] + resp[peak_y - 1, peak_x]
+
+                            sub_x = peak_x - (dx / dxx) if abs(dxx) > 1e-4 else float(peak_x)
+                            sub_y = peak_y - (dy / dyy) if abs(dyy) > 1e-4 else float(peak_y)
+
+                            sub_x = np.clip(sub_x, peak_x - 0.5, peak_x + 0.5)
+                            sub_y = np.clip(sub_y, peak_y - 0.5, peak_y + 0.5)
+                            best_subpix = (float(sub_x), float(sub_y))
+                        else:
+                            best_subpix = (float(peak_x), float(peak_y))
+
+                u_det = x1 + best_subpix[0]
+                v_det = y1 + best_subpix[1]
+
+                # 偏置量
+                du = u_det - cx_nom
+                dv = v_det - cy_nom
+
+                # 棋盘图像坐标系下的毫米偏差 (X向右为正, Y向下为正)
+                board_dx_mm = du * K_x
+                board_dy_mm = dv * K_y
+
+                # 机械臂第一视角坐标系下的毫米物理补偿:
+                # 机械臂在黑方底线外正后方，a列在最右侧(X为正)，i列在最左侧(X为负)
+                # 图像向右偏(向i列偏) -> 机械臂X应向负方向补偿 (robot_dx = -board_dx)
+                # 图像向下偏(向远端红方偏) -> 机械臂Y应向远端正方向补偿 (robot_dy = +board_dy)
+                robot_dx_mm = -board_dx_mm
+                robot_dy_mm = +board_dy_mm
+
+                dist_mm = np.sqrt(board_dx_mm**2 + board_dy_mm**2)
+
+                piece_offsets[pos_str] = {
+                    "cell": (r, c),
+                    "pos_str": pos_str,
+                    "char": char,
+                    "nominal_px": (round(cx_nom, 1), round(cy_nom, 1)),
+                    "detected_px": (round(u_det, 2), round(v_det, 2)),
+                    "delta_px": (round(du, 2), round(dv, 2)),
+                    "board_offset_mm": (round(board_dx_mm, 2), round(board_dy_mm, 2)),
+                    "robot_offset_mm": (round(robot_dx_mm, 2), round(robot_dy_mm, 2)),
+                    "radius_px": round(best_r, 1),
+                    "offset_dist_mm": round(dist_mm, 2),
+                    "confidence": round(float(best_score), 1)
+                }
+
+        return piece_offsets
+
+    def visualize_board(self, warped_bgr: np.ndarray, grid_chars: List[List[str]],
+                        conf_grid: List[List[float]],
+                        piece_offsets: Optional[Dict[str, Dict]] = None) -> np.ndarray:
+        """
+        在拉平后的棋盘图像上绘制各个格子的识别结果、置信度以及毫米级偏置瞄准十字线
         """
         vis = warped_bgr.copy()
-        padding = 50
-        cell_w = (450 - padding * 2) / 8.0
-        cell_h = (500 - padding * 2) / 9.0
+        padding = 50.0
+        cell_w = (450.0 - padding * 2.0) / 8.0
+        cell_h = (500.0 - padding * 2.0) / 9.0
+        col_chars = "abcdefghi"
 
         for r in range(10):
             for c in range(9):
@@ -514,13 +654,40 @@ class ChessRecognizer:
 
                 cx = int(round(padding + c * cell_w))
                 cy = int(round(padding + r * cell_h))
+                pos_str = f"{col_chars[c]}{r}"
 
-                # 红方红圈，黑方绿圈
-                color = (0, 0, 220) if char.isupper() else (0, 180, 0)
-                cv2.circle(vis, (cx, cy), 18, color, 2)
-
+                # 基础字符与阵营标示圈
+                is_red = char.isupper()
+                color = (0, 0, 220) if is_red else (0, 180, 0)
                 text = f"{char}"
-                cv2.putText(vis, text, (cx - 6, cy + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA)
+
+                if piece_offsets and pos_str in piece_offsets:
+                    info = piece_offsets[pos_str]
+                    u_det, v_det = info["detected_px"]
+                    r_px = int(round(info["radius_px"]))
+                    u_i, v_i = int(round(u_det)), int(round(v_det))
+
+                    # 1. 理论交叉中心：蓝色细十字准星
+                    cv2.drawMarker(vis, (cx, cy), (255, 120, 0), cv2.MARKER_CROSS, 10, 1)
+
+                    # 2. 实测物理圆心：高亮黄色圆环与黄色实心中心点
+                    cv2.circle(vis, (u_i, v_i), r_px, (0, 240, 255), 1, cv2.LINE_AA)
+                    cv2.circle(vis, (u_i, v_i), 2, (0, 240, 255), -1)
+
+                    # 3. 偏置连线 (红色矢量，指示机械臂微调方向)
+                    if info["offset_dist_mm"] >= 0.5:
+                        cv2.line(vis, (cx, cy), (u_i, v_i), (0, 0, 255), 1, cv2.LINE_AA)
+
+                    # 4. 棋子文字标记在实测圆心位置
+                    cv2.putText(vis, text, (u_i - 5, v_i + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA)
+
+                    # 5. 标注物理偏移毫米值 (例如 "+1.2,-0.5")
+                    rob_dx, rob_dy = info["robot_offset_mm"]
+                    offset_text = f"{rob_dx:+.1f},{rob_dy:+.1f}"
+                    cv2.putText(vis, offset_text, (u_i - 16, v_i + 17), cv2.FONT_HERSHEY_SIMPLEX, 0.32, (255, 255, 255), 1, cv2.LINE_AA)
+                else:
+                    cv2.circle(vis, (cx, cy), 18, color, 2)
+                    cv2.putText(vis, text, (cx - 6, cy + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2, cv2.LINE_AA)
 
         return vis
 
@@ -569,11 +736,15 @@ class ChessRecognizer:
             grid_chars, conf_grid, layout_str = self.classify_board(warped)
         t_classify = time.time() - t1
 
+        t_offset_start = time.time()
+        piece_offsets = self.detect_piece_offsets(warped, grid_chars)
+        t_offset = time.time() - t_offset_start
+
         fen = self.format_fen(grid_chars)
-        vis_board = self.visualize_board(warped, grid_chars, conf_grid)
+        vis_board = self.visualize_board(warped, grid_chars, conf_grid, piece_offsets=piece_offsets)
         total_time = time.time() - t0
 
-        # 生成可视化调试图
+        # 生成可视化调试图 (原图视角叠加四角点、网格与实测圆心偏置准星)
         debug_vis = image_bgr.copy()
         for idx, (pt, name) in enumerate(zip(corners, BONE_NAMES)):
             x, y = int(pt[0]), int(pt[1])
@@ -585,6 +756,26 @@ class ChessRecognizer:
         pts = corners.astype(np.int32).reshape((-1, 1, 2))
         cv2.polylines(debug_vis, [pts[[0, 1, 3, 2]]], True, (0, 255, 0), 2)
 
+        # 将校正图上的亚像素圆心与理论网格逆透视变换回原图相机坐标系
+        try:
+            M_inv = np.linalg.inv(M)
+            for pos_str, info in piece_offsets.items():
+                u_d, v_d = info["detected_px"]
+                cx_n, cy_n = info["nominal_px"]
+
+                pts_warp = np.array([[[u_d, v_d]], [[cx_n, cy_n]]], dtype=np.float32)
+                pts_orig = cv2.perspectiveTransform(pts_warp, M_inv)
+
+                cam_u, cam_v = int(round(pts_orig[0][0][0])), int(round(pts_orig[0][0][1]))
+                cam_cx, cam_cy = int(round(pts_orig[1][0][0])), int(round(pts_orig[1][0][1]))
+
+                # 原图画出微调瞄准线与圆心
+                cv2.circle(debug_vis, (cam_u, cam_v), 3, (0, 240, 255), -1)
+                if info["offset_dist_mm"] >= 1.0:
+                    cv2.line(debug_vis, (cam_cx, cam_cy), (cam_u, cam_v), (0, 0, 255), 1, cv2.LINE_AA)
+        except Exception:
+            pass
+
         return {
             "corners": corners.tolist(),
             "corner_scores": corner_scores.tolist(),
@@ -592,12 +783,14 @@ class ChessRecognizer:
             "conf_grid": conf_grid,
             "layout_str": layout_str,
             "fen": fen,
+            "piece_offsets": piece_offsets,
             "warped_image": warped,
             "visualized_board": vis_board,
             "debug_visualization": debug_vis,
             "timing": {
                 "corner_ms": round(t_corner * 1000, 1),
                 "classify_ms": round(t_classify * 1000, 1),
+                "offset_ms": round(t_offset * 1000, 1),
                 "total_ms": round(total_time * 1000, 1)
             }
         }

@@ -77,9 +77,23 @@ def process_image(image: np.ndarray, model_choice: str, use_smoothing: bool):
             elif char.islower() and char not in ['.', 'x']:
                 black_pieces.append(f"{PIECE_ZH.get(char, char)}({r},{c})")
 
+    # 格式化毫米级偏置统计
+    offsets = result.get("piece_offsets", {})
+    offset_list = []
+    for pos_str, info in sorted(offsets.items()):
+        rob_dx, rob_dy = info["robot_offset_mm"]
+        dist = info["offset_dist_mm"]
+        ch = info["char"]
+        zh = PIECE_ZH.get(ch, ch)
+        if dist >= 1.0:
+            offset_list.append(f"  • {pos_str} [{zh}]: 机械臂补偿 (ΔX={rob_dx:+.1f}mm, ΔY={rob_dy:+.1f}mm, 偏距={dist:.1f}mm)")
+
+    offset_report = "\n".join(offset_list) if offset_list else "  (全盘棋子均处于名义交叉点中心，偏距 < 1.0 mm)"
+
     piece_stats = (
         f"🔴 红方棋子 ({len(red_pieces)}枚): {' '.join(red_pieces)}\n\n"
-        f"⚫ 黑方棋子 ({len(black_pieces)}枚): {' '.join(black_pieces)}"
+        f"⚫ 黑方棋子 ({len(black_pieces)}枚): {' '.join(black_pieces)}\n\n"
+        f"🎯 毫米级物理偏置测量 (共解算 {len(offsets)} 颗棋子):\n{offset_report}"
     )
 
     t = result["timing"]
@@ -87,6 +101,7 @@ def process_image(image: np.ndarray, model_choice: str, use_smoothing: bool):
         f"⏱️ 耗时统计:\n"
         f"  • 阶段 1 (角点定位): {t['corner_ms']:.1f} ms\n"
         f"  • 阶段 2 (盘面分类): {t['classify_ms']:.1f} ms\n"
+        f"  • 阶段 3 (毫米补偿): {t.get('offset_ms', 0.0):.1f} ms\n"
         f"  • 端到端总用时: {t['total_ms']:.1f} ms"
     )
 

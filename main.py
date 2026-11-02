@@ -22,6 +22,7 @@ import cv2
 
 # ---- 三层模块导入 ----
 from localization.find_chess_new import ChessVisionV15_4, VideoStream
+from localization.onnx_vision_adapter import ONNXVisionAdapter
 from game.board import ChessBoard
 from game.ai import ChessAI
 from control import ChessArmController
@@ -157,7 +158,12 @@ class ChessRobotOrchestrator:
         self.vs = VideoStream().start()
         time.sleep(1.2)
 
-        self.vision = VisionAdapter(model_path, self.move_queue, self.vision_ready)
+        if model_path and model_path.endswith(".pt"):
+            # 兼容旧版 YOLO 视觉追踪适配器
+            self.vision = VisionAdapter(model_path, self.move_queue, self.vision_ready)
+        else:
+            # 默认启用第四代高精 ONNX 管线与毫米级偏置感知适配器
+            self.vision = ONNXVisionAdapter(move_queue=self.move_queue, ready_event=self.vision_ready)
 
         # ---- 运行时状态 ----
         self.piece_count = 32
@@ -236,10 +242,15 @@ class ChessRobotOrchestrator:
         self.vision.suppress_detection = True
 
         try:
+            # 获取视觉系统解算出的实物棋子毫米偏置
+            start_off = getattr(self.vision, "get_piece_offset", lambda p: (0.0, 0.0))(from_vis)
             if is_capture:
-                self.arm.capture(from_vis, to_vis)
+                target_off = getattr(self.vision, "get_piece_offset", lambda p: (0.0, 0.0))(to_vis)
+                print(f"🎯 [硬件补偿] 执行毫米级吃子: 目标 {to_vis} 偏置 {target_off}mm, 己方 {from_vis} 偏置 {start_off}mm")
+                self.arm.capture(from_vis, to_vis, target_offset=target_off, start_offset=start_off)
             else:
-                self.arm.pick_and_place(from_vis, to_vis)
+                print(f"🎯 [硬件补偿] 执行毫米级移位: 起点 {from_vis} 偏置 {start_off}mm")
+                self.arm.pick_and_place(from_vis, to_vis, start_offset=start_off, end_offset=(0.0, 0.0))
             self.board.make_move(ai_move)
             if is_capture:
                 self.piece_count -= 1
@@ -343,12 +354,11 @@ if __name__ == "__main__":
         "recognition", "models", "best.pt"
     )
 
-    if not os.path.exists(MODEL_PATH):
-        print(f"❌ 模型文件不存在: {MODEL_PATH}")
-        print("   请将训练好的 best.pt 放到 recognition/models/ 目录下")
-        sys.exit(1)
+    # 默认优先启用第四代 ONNX 高精视觉感知与毫米级补偿引擎
+    model_arg = MODEL_PATH if (len(sys.argv) > 1 and sys.argv[1] == "--legacy-pt" and os.path.exists(MODEL_PATH)) else None
+    print("🚀 启动中国象棋下棋机器人中枢 (第四代高精 ONNX 视觉 + 毫米级自适应补偿)...")
 
-    orchestrator = ChessRobotOrchestrator(MODEL_PATH)
+    orchestrator = ChessRobotOrchestrator(model_arg)
     try:
         orchestrator.run()
     except KeyboardInterrupt:

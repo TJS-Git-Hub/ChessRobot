@@ -46,63 +46,37 @@ class ChessArmController:
 
 
     @staticmethod
-    def board_to_physical(pos_str):
-
+    def board_to_physical(pos_str, offset_x=0.0, offset_y=0.0):
         """
-
         输入: 'a0' (黑方视角右下角黑车)
-
-        输出: (x, y, z) 物理坐标
-
+        offset_x: 机械臂X轴物理偏置 (mm, 向右为正, 向左为负)
+        offset_y: 机械臂Y轴物理偏置 (mm, 向远端为正, 向近端为负)
+        输出: (x, y, z) 物理坐标 (mm)
         """
-
         col_char = pos_str[0].lower()
-
         row = int(pos_str[1:])
 
         if col_char not in "abcdefghi" or row not in range(10):
             raise ValueError("Board coordinate must be a0..i9")
         col_idx = ord(col_char) - ord('a')
 
+        # 1. X 轴计算 (左右) + 物理毫米偏置补偿
+        # 机械臂在 e0 正后方。黑方第一视角下：a列在最右侧(+), i列在最左侧(-)
+        x = (4 - col_idx) * config.SQUARE_WIDTH + float(offset_x)
 
-
-        # 1. X 轴计算 (左右)
-
-        # 机械臂在 e0 后方。黑方视角下：a列在最右侧(正)，i列在最左侧(负)
-
-        x = (4 - col_idx) * config.SQUARE_WIDTH
-
-
-
-        # 2. Y 轴计算 (前后)
-
+        # 2. Y 轴计算 (前后) + 物理毫米偏置补偿
         # 机械臂在黑方底线 (row 0) 后方，row 越大，距离 y 越远
-
         y = config.BOARD_ORIGIN_Y
-
-
-
         if row <= 4:
-
-            # 黑方半场 (row: 0, 1, 2, 3, 4)，距离较近
-
+            # 黑方半场 (row: 0, 1, 2, 3, 4)
             y += row * config.SQUARE_HEIGHT
-
         else:
-
-            # 红方半场 (row: 5, 6, 7, 8, 9)，距离较远
-
-            # 必须跨越：黑方4格距离 + 1个楚河汉界 + 红方剩余格数
-
+            # 红方半场 (row: 5, 6, 7, 8, 9)，跨越楚河汉界
             y += (4 * config.SQUARE_HEIGHT) + config.RIVER_HEIGHT + ((row - 5) * config.SQUARE_HEIGHT)
-
-
+        y += float(offset_y)
 
         # 3. Z 轴
-
         z = config.BOARD_Z
-
-
 
         return round(x, 2), round(y, 2), z
 
@@ -170,7 +144,7 @@ class ChessArmController:
     def request_stop(self):
         self._stop.set()
 
-    def _preflight_pick_targets(self, *positions, include_graveyard=False):
+    def _preflight_pick_targets(self, *targets, include_graveyard=False):
         """Reject known unreachable pickup/drop waypoints before touching pieces.
 
         Interpolated paths are still checked separately before each segment.
@@ -178,28 +152,33 @@ class ChessArmController:
         """
         if self._stop.is_set():
             raise MotionError("Motion stopped; inspect the physical board before restarting")
-        targets = []
-        for position in positions:
-            x, y, z = self.board_to_physical(position)
-            targets.extend(((position, (x, y, config.SAFE_Z)),
-                            (position, (x, y, config.BOARD_Z + 8.0)),
-                            (position, (x, y, z))))
+        waypoints = []
+        for item in targets:
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], (tuple, list)):
+                pos, (ox, oy) = item
+            else:
+                pos, ox, oy = item, 0.0, 0.0
+            x, y, z = self.board_to_physical(pos, ox, oy)
+            waypoints.extend(((pos, (x, y, config.SAFE_Z)),
+                              (pos, (x, y, config.BOARD_Z + 8.0)),
+                              (pos, (x, y, z))))
         if include_graveyard:
             x, y, z = self.GRAVEYARD_XYZ
-            targets.extend((("graveyard", (x, y, config.SAFE_Z)),
-                            ("graveyard", (x, y, z))))
-        for name, target in targets:
+            waypoints.extend((("graveyard", (x, y, config.SAFE_Z)),
+                              ("graveyard", (x, y, z))))
+        for name, target in waypoints:
             if self.solver.solve_ik(*target) is None:
                 raise MotionError(f"Unreachable {name} waypoint {target}; no pickup started")
 
-    def pick_and_place(self, start, end, return_to_wait=True):
+    def pick_and_place(self, start, end, start_offset=(0.0, 0.0), end_offset=(0.0, 0.0), return_to_wait=True):
         """
-        常规移位：s->e
+        常规移位：start -> end
+        支持毫米级偏置补偿：start_offset=(ox, oy), end_offset=(ox, oy) (单位: mm)
         引入【微距垂直阶段】强制小臂优先拉升，防止刮蹭
         """
-        self._preflight_pick_targets(start, end)
-        s_xyz = self.board_to_physical(start)
-        e_xyz = self.board_to_physical(end)
+        self._preflight_pick_targets((start, start_offset), (end, end_offset))
+        s_xyz = self.board_to_physical(start, *start_offset)
+        e_xyz = self.board_to_physical(end, *end_offset)
         
         # 定义微距安全区：棋子表面上方 8mm
         MICRO_Z = config.BOARD_Z + 8.0
@@ -244,15 +223,19 @@ class ChessArmController:
 
         if return_to_wait:
             self.go_to_wait()
+        return True
 
-    def capture(self, start, end):
-        """吃子动作：全流程应用微距垂直保护"""
-        self._preflight_pick_targets(start, end, include_graveyard=True)
-        print(f">>> 执行吃子序列: 移除 {end}, 移动 {start}")
-        e_xyz = self.board_to_physical(end)
+    def capture(self, start, end, target_offset=(0.0, 0.0), start_offset=(0.0, 0.0), return_to_wait=True):
+        """吃子动作：全流程应用微距垂直保护与毫米级偏置补偿
+        target_offset: 被吃目标棋子 (end) 的实测物理偏置 (mm)
+        start_offset: 移动方己方棋子 (start) 的实测物理偏置 (mm)
+        """
+        self._preflight_pick_targets((end, target_offset), (start, start_offset), include_graveyard=True)
+        print(f">>> 执行吃子序列: 移除 {end} (偏置: {target_offset}mm), 移动 {start} (偏置: {start_offset}mm)")
+        e_xyz = self.board_to_physical(end, *target_offset)
         MICRO_Z = config.BOARD_Z + 8.0
 
-        # 1. 移除对方棋子
+        # 1. 移除对方棋子 (吸取对方在 end 的实际物理中心)
         self.move_to_smooth(e_xyz[0], e_xyz[1], config.SAFE_Z, 1.2)
         self.move_to_smooth(e_xyz[0], e_xyz[1], MICRO_Z, 0.6)
         time.sleep(0.3)
@@ -273,8 +256,9 @@ class ChessArmController:
         time.sleep(0.5)
         self.move_to_smooth(self.GRAVEYARD_XYZ[0], self.GRAVEYARD_XYZ[1], config.SAFE_Z, 0.8)
 
-        # 3. 执行己方移位 (内部已包含微抬逻辑)
-        self.pick_and_place(start, end, return_to_wait=True)
+        # 3. 执行己方移位 (吸取己方在 start 的实际物理中心，放置在 end 名义格点中心)
+        self.pick_and_place(start, end, start_offset=start_offset, end_offset=(0.0, 0.0), return_to_wait=return_to_wait)
+        return True
 
 
 
