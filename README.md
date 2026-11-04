@@ -1,3 +1,7 @@
+> 本机分支版本与上游差异、运行资源和验证限制见 [VERSION_NOTES.md](VERSION_NOTES.md)。
+
+> **当前版本说明：** AI 决策已改为调用本项目内的 Pikafish；下方 CNN 说明保留作旧版本参考。使用方法和限制请看 [Pikafish使用说明](Pikafish使用说明.md)。
+
 # 中国象棋对弈机器人 | Chinese Chess Robot
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)

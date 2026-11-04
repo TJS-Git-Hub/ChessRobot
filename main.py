@@ -304,6 +304,11 @@ class ChessRobotOrchestrator:
         self.stop_event.set()
 
         try:
+            self.ai.close()
+        except Exception as exc:
+            print(f"⚠️ 关闭 Pikafish 失败: {exc}")
+
+        try:
             self.arm.shutdown()
         except Exception:
             pass

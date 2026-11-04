@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0-local-pikafish-onnx",
+  "note": "Runtime assets are supplied separately; code repository does not contain the binaries.",
+  "files": [
+    {
+      "path": "recognition/models/onnx/pose_rtmpose_4kpt.onnx",
+      "bytes": 10704184,
+      "sha256": "fbd895d40ab81b41b8188f881866485678b7871775821aa50cfe74004a1dc796"
+    },
+    {
+      "path": "recognition/models/onnx/layout_swinv2_nano.onnx",
+      "bytes": 31101356,
+      "sha256": "da66ba9809f15127f8ae729b1755e42ee61c100c4f9979ce0ef13602ac471298"
+    },
+    {
+      "path": "recognition/models/onnx/piece_classifier_mobilenetv3.onnx",
+      "bytes": 2348930,
+      "sha256": "1c1a0d0d1b305b81e1db3dac3098fb1880330ad60949562b7a809e0dc879e444"
+    },
+    {
+      "path": "game/pikafish/Pikafish-Windows-x86-64-universal.exe",
+      "bytes": 7421952,
+      "sha256": "9824fff4e3c4a72afbc6cfdc611c140b32f79e3c5fd5fe4bf6d747833875b86d"
+    },
+    {
+      "path": "game/pikafish/pikafish.nnue",
+      "bytes": 50706378,
+      "sha256": "7d13d73569a9b571ba0eb20cf1596247bc2a42738967e61afef6482b231e900e"
+    }
+  ]
+}

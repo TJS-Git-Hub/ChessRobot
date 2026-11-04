@@ -49,3 +49,10 @@ desktop.ini
 # === 日志与临时文件 ===
 *.log
 *.tmp
+
+# Local runtime assets and migration backups
+*.onnx
+*.nnue
+*.exe
+pikafish迁移前备份/
+game/pikafish/*Contributor.txt

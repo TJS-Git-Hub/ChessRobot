@@ -172,6 +172,8 @@ class ChessRobotUI(QMainWindow):
             self.orchestrator.run()
         except Exception as e:
             print(f"❌ 引擎线程崩溃: {e}")
+            if hasattr(self, 'orchestrator'):
+                self.orchestrator.shutdown()
 
     def start_logic(self):
         if not self.engine_thread.is_alive():
