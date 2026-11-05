@@ -1,0 +1,18 @@
+{
+  "image": "recognition/data/user_test_samples/user_move_1.jpg",
+  "sha256": "f9c0c8f587a6e13ad08e0efe158c95f6ff9f2226a70f47bf4855a0f5d53ea1d8",
+  "grid": [
+    "...akab..",
+    ".........",
+    ".cn.c.n..",
+    "p...p...p",
+    ".Cb...p.P",
+    "..pr.....",
+    "P.P.P.P..",
+    "N...B.rC.",
+    "..R.K....",
+    "..BA.A.NR"
+  ],
+  "label_source": "Manual review of original photograph and rotated glyph crops on 2026-11-05; existing development sample, NOT an independent blind test",
+  "orientation": "Black robot side on image right; column a toward image top"
+}

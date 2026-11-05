@@ -1,0 +1,4 @@
+-r requirements.txt
+# Only required for the camera-only live observer, not for the hardware driver.
+mediapipe>=0.10.35,<0.11
+Pillow>=10

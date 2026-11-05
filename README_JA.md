@@ -4,6 +4,8 @@
 
 [简体中文](README_ZH.md) · [English](README.md) · **日本語**
 
+> **視覚候補版：`v2.3.0-vision-offline-rc.1`（2026-11-05）。** 第4世代の観測・局面同期・動作後の新規フレーム検証は、180件のオフラインテストを通過しました。状態は **CONDITIONAL** で、実物の校正およびカメラ・アームの検証は未完了です。既定は観測のみです。[版の説明（中国語）](docs/releases/v2.3.0-vision-offline-rc.1.md) · [操作手順（中国語）](docs/vision-readiness.zh-CN.md)。以下の授業用試作機の説明は、従来の実機システムの記録です。
+
 **詳細を読む：** [視覚認識](docs/technical-notes.ja.md#vision-history) · [運動制御](docs/technical-notes.ja.md#motion-hardware) · [着手選択](docs/technical-notes.ja.md#game-decision) · [数学モデル](docs/technical-notes.ja.md#mathematical-models) · [実機ギャラリー](docs/technical-notes.ja.md#hardware-gallery) · [セットアップ](docs/setup.ja.md)
 
 ChessRobot（「智弈·灵手」）は、4名のチームで開発した学部のロボティクス授業プロジェクトです。上方カメラで人間の着手を検出し、ソフトウェア上の盤面から応手を選択して、4関節アームが磁性体の駒を搬送します。卓上環境で、視覚認識、局面管理、実機動作を連携させることに取り組みました。

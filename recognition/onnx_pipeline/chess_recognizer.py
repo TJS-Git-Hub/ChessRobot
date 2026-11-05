@@ -84,6 +84,11 @@ class ChessRecognizer:
     def _load_sessions(self):
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # Leave CPU capacity for capture, tracking, hand detection and drawing.
+        # On the current device four threads beat one/two/eight/default in the
+        # same-image timing check; this does not change weights or preprocessing.
+        opts.intra_op_num_threads = min(4, os.cpu_count() or 1)
+        opts.inter_op_num_threads = 1
 
         if os.path.exists(self.pose_model_path):
             self.pose_session = ort.InferenceSession(self.pose_model_path, opts, providers=['CPUExecutionProvider'])
@@ -236,7 +241,7 @@ class ChessRecognizer:
         tensor = np.transpose(norm, (2, 0, 1))[np.newaxis, ...]  # (1, 3, H, W)
 
         outputs = self.classifier_session.run(None, {self.classifier_input_name: tensor})
-        logits = outputs[0][0]  # shape (90, 16)
+        logits = self.class_probabilities(outputs[0][0])
 
         # 多帧平滑支持
         self.recent_logits_buffer.append(logits)
@@ -258,243 +263,185 @@ class ChessRecognizer:
 
         return grid_chars, conf_grid, layout_str
 
+    @staticmethod
+    def class_probabilities(values: np.ndarray) -> np.ndarray:
+        """Nano exports probabilities; Tiny exports logits. Validate both."""
+        values = np.asarray(values, dtype=np.float32)
+        if values.shape != (90, 16) or not np.isfinite(values).all():
+            raise ValueError("Expected finite classifier output (90, 16)")
+        if (values >= 0).all() and (values <= 1).all() and np.allclose(values.sum(-1), 1, atol=1e-3):
+            return values
+        exp = np.exp(values - values.max(axis=-1, keepdims=True))
+        return exp / exp.sum(axis=-1, keepdims=True)
+
     def get_allowed_classes(self, is_red: bool, r: int, c: int) -> List[str]:
-        """中国象棋九宫/楚河汉界/底线拓扑规则候选空间"""
-        if is_red:
-            in_palace = (7 <= r <= 9 and 3 <= c <= 5)
-            if in_palace:
-                allowed = ['K', 'A', 'N', 'R', 'C']
-                if r in [7, 8]: allowed.append('P')
-                if r == 9 and c in [2, 6]: allowed.append('B')
-            elif r >= 5: # 红方半场
-                allowed = ['N', 'R', 'C']
-                if c in [0, 2, 4, 6, 8] and r in [5, 7, 9]: allowed.append('B')
-                if r < 9: allowed.append('P')
-            else: # 过河 (r <= 4)
-                allowed = ['N', 'R', 'C', 'P']
-        else: # 黑方
-            in_palace = (0 <= r <= 2 and 3 <= c <= 5)
-            if in_palace:
-                allowed = ['k', 'a', 'n', 'r', 'c']
-                if r in [1, 2]: allowed.append('p')
-                if r == 0 and c in [2, 6]: allowed.append('b')
-            elif r <= 4: # 黑方半场
-                allowed = ['n', 'r', 'c']
-                if c in [0, 2, 4, 6, 8] and r in [0, 2, 4]: allowed.append('b')
-                if r > 0: allowed.append('p')
-            else: # 过河 (r >= 5)
-                allowed = ['n', 'r', 'c', 'p']
-        return allowed
+        """Reachable squares, not the legal moves of the current position."""
+        if not (0 <= r < 10 and 0 <= c < 9):
+            return []
+        allowed = ['N', 'R', 'C']
+        rr = 9 - r if is_red else r
+        if rr <= 2 and 3 <= c <= 5:
+            allowed.append('K')
+        if (rr, c) in {(0, 3), (0, 5), (1, 4), (2, 3), (2, 5)}:
+            allowed.append('A')
+        if (rr, c) in {(0, 2), (0, 6), (2, 0), (2, 4), (2, 8), (4, 2), (4, 6)}:
+            allowed.append('B')
+        if rr >= 5 or (rr in (3, 4) and c % 2 == 0):
+            allowed.append('P')
+        return allowed if is_red else [ch.lower() for ch in allowed]
 
     def query_mobilenet_for_cell(self, padded: np.ndarray, r: int, c: int,
                                  allowed_candidates: List[str],
                                  pad=50, w_step=350.0/8.0, h_step=400.0/9.0, half=32) -> Tuple[str, float]:
-        """单兵 MobileNetV3 64x64 高精模型在合法候选空间内的二次仲裁"""
+        """Return independent model evidence, never a fabricated label."""
         if self.piece_session is None or not allowed_candidates:
-            return allowed_candidates[0] if allowed_candidates else '.', 0.50
-
-        char_to_idx = {
-            'a': 0, 'b': 1, 'c': 2, 'k': 3, 'n': 4, 'p': 5, 'r': 6,
-            'A': 7, 'B': 8, 'C': 9, 'K': 10, 'N': 11, 'P': 12, 'R': 13
-        }
-        mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
-        std_norm = np.array([58.395, 57.12, 57.375], dtype=np.float32)
-
+            return 'x', 0.0
+        chars = ['a', 'b', 'c', 'k', 'n', 'p', 'r', 'A', 'B', 'C', 'K', 'N', 'P', 'R']
         cx = int(round(pad + c * w_step)) + half
         cy = int(round(pad + r * h_step)) + half
-        patch_64 = padded[cy - 32:cy + 32, cx - 32:cx + 32]
-        rgb_64 = cv2.cvtColor(patch_64, cv2.COLOR_BGR2RGB).astype(np.float32)
-        norm = (rgb_64 - mean) / std_norm
-        tensor = np.transpose(norm, (2, 0, 1))[np.newaxis, ...]
+        patch = padded[cy - 32:cy + 32, cx - 32:cx + 32]
+        if patch.shape[:2] != (64, 64):
+            return 'x', 0.0
+        rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB).astype(np.float32)
+        tensor = ((rgb - [123.675, 116.28, 103.53]) /
+                  [58.395, 57.12, 57.375]).astype(np.float32).transpose(2, 0, 1)[None]
         logits = self.piece_session.run(None, {self.piece_input_name: tensor})[0][0]
-        exp_l = np.exp(logits - np.max(logits))
-        probs = exp_l / np.sum(exp_l)
+        if logits.shape != (14,) or not np.isfinite(logits).all():
+            return 'x', 0.0
+        probs = np.exp(logits - np.max(logits))
+        probs /= probs.sum()
+        best = int(np.argmax(probs))
+        competitors = [float(probs[i]) for i, ch in enumerate(chars)
+                       if ch in allowed_candidates and i != best]
+        margin = float(probs[best]) - max(competitors, default=0.0)
+        if chars[best] not in allowed_candidates or margin < 0.15:
+            return 'x', 0.0
+        return chars[best], float(probs[best])
 
-        best_ch = allowed_candidates[0]
-        best_prob = -1.0
-        for ch in allowed_candidates:
-            if ch in char_to_idx:
-                idx = char_to_idx[ch]
-                if probs[idx] > best_prob:
-                    best_prob = probs[idx]
-                    best_ch = ch
-        return best_ch, float(best_prob)
+    @staticmethod
+    def ink_color_evidence(patch: np.ndarray) -> Optional[bool]:
+        """White-normalized ink chroma; ambiguous or weak marks have no vote.
 
-    def refine_with_physics_and_rules(self,
-                                      warped_bgr: np.ndarray,
+        A low absolute R-G is not evidence for black. Normalize ink against the
+        bright face of this same piece, making a washed-out red piece abstain.
+        """
+        h, w = patch.shape[:2]
+        yy, xx = np.ogrid[:h, :w]
+        disk = (xx-w//2)**2 + (yy-h//2)**2 <= (min(h, w)/3)**2
+        gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+        face = float(np.median(gray[disk]))
+        ink = disk & (gray < face-12)
+        background = disk & (gray >= face-5)
+        if ink.sum() < 30 or background.sum() < 20 or face < 30:
+            return None
+        bgr = patch[ink].astype(float)
+        bg = patch[background].astype(float).mean(axis=0)
+        normalized = bgr / (bg+1)
+        score = float(np.median((normalized[:, 2]-normalized[:, 1]) /
+                               (normalized[:, 2]+normalized[:, 1]+1e-3)))
+        if score > 0.20:
+            return True
+        if score < -0.10:
+            return False
+        return None
+
+    def query_rotated_piece(self, patch: np.ndarray) -> Tuple[str, float]:
+        """Require orientation-consistent auxiliary evidence, not legal-square priors."""
+        if self.piece_session is None or patch.shape[:2] != (64, 64):
+            return 'x', 0.0
+        chars = ['a', 'b', 'c', 'k', 'n', 'p', 'r', 'A', 'B', 'C', 'K', 'N', 'P', 'R']
+        probabilities = []
+        for turns in range(4):
+            rgb = cv2.cvtColor(np.rot90(patch, turns).copy(), cv2.COLOR_BGR2RGB).astype(np.float32)
+            tensor = ((rgb - [123.675, 116.28, 103.53]) /
+                      [58.395, 57.12, 57.375]).astype(np.float32).transpose(2, 0, 1)[None]
+            logits = self.piece_session.run(None, {self.piece_input_name: tensor})[0][0]
+            if logits.shape != (14,) or not np.isfinite(logits).all():
+                return 'x', 0.0
+            probs = np.exp(logits - logits.max())
+            probabilities.append(probs / probs.sum())
+        probabilities = np.asarray(probabilities)
+        average = probabilities.mean(axis=0)
+        winner = int(average.argmax())
+        supporting = probabilities.argmax(axis=1) == winner
+        supporting &= probabilities[:, winner] >= .55
+        margin = float(average[winner] - np.partition(average, -2)[-2])
+        confidence = float(np.median(probabilities[:, winner]))
+        if supporting.sum() < 3 or confidence < .65 or margin < .20:
+            return 'x', 0.0
+        return chars[winner], confidence
+
+    def refine_with_physics_and_rules(self, warped_bgr: np.ndarray,
                                       grid_chars: List[List[str]],
                                       conf_grid: List[List[float]]) -> Tuple[List[List[str]], List[List[float]], str]:
-        """
-        工业级双环色度物理分析、抗反光存在性保全与全局棋规无损仲裁引擎 (Pipeline v6)：
-        1. 物理保全原则 (Conservation of Matter)：实体棋子绝不在后处理阶段被错误删除为 '.'，0 漏检。
-        2. 双环物理色度分析 (Dual-Zone Chromaticity Analyzer)：
-           - 环区 1 (字面刻痕核心区 r <= 12px) + 环区 2 (外围圆槽凹圈 12.5px <= r <= 16.5px)
-           - 红方真红刻痕：CombLabA >= 142.0 或 CombRG >= 25.0；黑方刻痕：CombLabA <= 135.5 且 CombRG <= 10.0
-           - 物理色度决定真身阵营，绝不随模型预测错判而颠倒。
-        3. 拓扑合法空间映射与 MobileNetV3 约束仲裁：
-           - 阵营确定后，严格约束九宫格、楚河汉界与兵卒底线移动；
-           - 若原始标签在拓扑禁区（如过河相/象），自动由单兵网络在合法空间内重选最优解。
-        4. 全局棋规物理数量动态重分配 (Non-destructive Global Arbitration)：
-           - 若单类棋子因模型模糊出现超额（如 3 门炮、3 只象），不执行抹除，而是将低置信度者重分配给未饱和棋种。
-        """
-        pad = 50
-        w_step = 350.0 / 8.0
-        h_step = 400.0 / 9.0
-        half = 32
-        padded = cv2.copyMakeBorder(warped_bgr, half, half, half, half, cv2.BORDER_REFLECT)
+        """Recognize physical pieces without rewriting them to obey game rules.
 
-        refined_grid = [row.copy() for row in grid_chars]
-        refined_conf = [row.copy() for row in conf_grid]
-
+        Reachable-square checks belong to game validation. A real elephant on
+        the other side of the river must remain an elephant in the observation.
+        Primary predictions are preserved unless independent evidence resolves
+        a class-count conflict. Weak predictions may use local ink evidence;
+        stronger conflicting predictions require stronger auxiliary evidence.
+        Original occlusion x and empty points are never replaced here.
+        """
+        refined = [row.copy() for row in grid_chars]
+        confidence = [row.copy() for row in conf_grid]
+        self.last_refinement_edits = []
+        padded = cv2.copyMakeBorder(warped_bgr, 32, 32, 32, 32, cv2.BORDER_REFLECT)
+        # First assess side independently. Type counts only trigger extra
+        # measurement; they never select the replacement class.
         for r in range(10):
             for c in range(9):
-                orig_ch = grid_chars[r][c]
-                c_conf = conf_grid[r][c]
-                if orig_ch in ['.', 'x']:
-                    refined_grid[r][c] = '.'
+                original = grid_chars[r][c]
+                if original in ('.', 'x') or conf_grid[r][c] >= .90:
                     continue
-
-                cx = int(round(pad + c * w_step)) + half
-                cy = int(round(pad + r * h_step)) + half
-                c_patch = padded[cy - 18:cy + 18, cx - 18:cx + 18]
-                h, w = c_patch.shape[:2]
-                Y, X = np.ogrid[:h, :w]
-                dist = np.sqrt((X - w // 2) ** 2 + (Y - h // 2) ** 2)
-
-                # 环区 1：内部字面核心区 (r <= 12.0)
-                inner_mask = dist <= 12.0
-                gray = cv2.cvtColor(c_patch, cv2.COLOR_BGR2GRAY)
-                std = float(np.std(gray))
-                inner_gray = gray[inner_mask]
-                face_bg = float(np.median(inner_gray))
-                ink_pixels = inner_mask & (gray < (face_bg - 12.0))
-                n_ink = int(np.sum(ink_pixels))
-
-                # 棋子存在性保全：仅当完全无刻痕无纹理时才判定为空 (彻底杜绝强光下漏检)
-                if n_ink < 30 and std < 20.0:
-                    refined_grid[r][c] = '.'
-                    continue
-
-                # 环区 2：外部凹槽圆环 (12.5 <= r <= 16.5)
-                ring_mask = (dist >= 12.5) & (dist <= 16.5)
-                ring_gray = gray[ring_mask]
-                ring_bg = float(np.median(ring_gray)) if len(ring_gray) > 0 else face_bg
-                ring_ink = ring_mask & (gray < (ring_bg - 10.0))
-                n_ring = int(np.sum(ring_ink))
-
-                lab = cv2.cvtColor(c_patch, cv2.COLOR_BGR2LAB)
-                if n_ink >= 12:
-                    inner_rg = float(np.mean(c_patch[:, :, 2][ink_pixels].astype(float) - c_patch[:, :, 1][ink_pixels].astype(float)))
-                    inner_la = float(np.mean(lab[:, :, 1][ink_pixels]))
-                else:
-                    inner_rg = 0.0
-                    inner_la = 128.0
-
-                if n_ring >= 20:
-                    ring_rg = float(np.mean(c_patch[:, :, 2][ring_ink].astype(float) - c_patch[:, :, 1][ring_ink].astype(float)))
-                    ring_la = float(np.mean(lab[:, :, 1][ring_ink]))
-                else:
-                    ring_rg = inner_rg
-                    ring_la = inner_la
-
-                comb_la = 0.65 * inner_la + 0.35 * ring_la
-                comb_rg = 0.65 * inner_rg + 0.35 * ring_rg
-
-                # 1. 物理色度独立裁决阵营
-                if comb_la >= 142.0 or comb_rg >= 25.0:
-                    is_red = True
-                elif comb_la <= 135.5 and comb_rg <= 10.0:
-                    is_red = False
-                else:
-                    is_red = (comb_la > 138.0 and comb_rg > 15.0)
-
-                # 2. 候选合法空间与单兵重判
-                allowed = self.get_allowed_classes(is_red, r, c)
-                desired_char = orig_ch.upper() if is_red else orig_ch.lower()
-
-                if desired_char in allowed:
-                    refined_grid[r][c] = desired_char
-                    refined_conf[r][c] = c_conf
-                else:
-                    best_ch, b_prob = self.query_mobilenet_for_cell(padded, r, c, allowed, pad, w_step, h_step, half)
-                    refined_grid[r][c] = best_ch
-                    refined_conf[r][c] = b_prob
-
-        # 3. 全局物理实体数量硬限幅动态重分配 (无损剪枝)
-        limits = {
-            'k': 1, 'K': 1,
-            'a': 2, 'A': 2,
-            'b': 2, 'B': 2,
-            'n': 2, 'N': 2,
-            'r': 2, 'R': 2,
-            'c': 2, 'C': 2,
-            'p': 5, 'P': 5
-        }
-
-        for iteration in range(5):
-            char_locations = collections.defaultdict(list)
-            for r in range(10):
-                for c in range(9):
-                    ch = refined_grid[r][c]
-                    if ch in limits:
-                        char_locations[ch].append((refined_conf[r][c], r, c))
-
-            violations = []
-            for ch, max_allowed in limits.items():
-                if len(char_locations[ch]) > max_allowed:
-                    violations.append((ch, len(char_locations[ch]) - max_allowed))
-
-            if not violations:
-                break
-
-            for ch, excess_count in violations:
-                locs = char_locations[ch]
-                locs.sort(key=lambda item: item[0]) # 最低置信度优先重判
-                is_red = ch.isupper()
-                side_limits = {k: v for k, v in limits.items() if (k.isupper() if is_red else k.islower())}
-
-                for i in range(min(excess_count, len(locs))):
-                    cur_conf, r, c = locs[i]
-                    avail_classes = [k for k, v in side_limits.items() if len(char_locations[k]) < v and k != ch]
-                    allowed = self.get_allowed_classes(is_red, r, c)
-                    valid_avail = [ac for ac in avail_classes if ac in allowed]
-
-                    if not valid_avail:
-                        continue
-
-                    best_ch, b_prob = self.query_mobilenet_for_cell(padded, r, c, valid_avail, pad, w_step, h_step, half)
-                    refined_grid[r][c] = best_ch
-                    refined_conf[r][c] = b_prob
-                    char_locations[ch].remove((cur_conf, r, c))
-                    char_locations[best_ch].append((b_prob, r, c))
-
-        refined_layout_str = "\n".join(["".join(row) for row in refined_grid])
-        return refined_grid, refined_conf, refined_layout_str
+                ch = original
+                cx, cy = round(50+c*350/8)+32, round(50+r*400/9)+32
+                side = self.ink_color_evidence(padded[cy-18:cy+18, cx-18:cx+18])
+                if side is not None:
+                    ch = ch.upper() if side else ch.lower()
+                refined[r][c] = ch
+        limits = dict(zip("KABNRCP", (1, 2, 2, 2, 2, 2, 5)))
+        limits.update({ch.lower(): count for ch, count in list(limits.items())})
+        counts = collections.Counter(refined[r][c] for r in range(10) for c in range(9)
+                                     if confidence[r][c] >= .50)
+        # Resolve weakest conflicting cells first and update counts immediately.
+        # Once a conflict is resolved, stronger pieces are not reclassified.
+        cells = sorted(((r, c) for r in range(10) for c in range(9)),
+                       key=lambda cell: confidence[cell[0]][cell[1]])
+        for r, c in cells:
+            original = grid_chars[r][c]
+            ch = refined[r][c]
+            if ch not in limits:
+                continue
+            cx, cy = round(50+c*350/8)+32, round(50+r*400/9)+32
+            best, probability = 'x', 0.0
+            if counts[ch] > limits[ch]:
+                best, probability = self.query_rotated_piece(padded[cy-32:cy+32, cx-32:cx+32])
+            required = .85 if conf_grid[r][c] >= .90 else .65
+            if (best != 'x' and probability >= required and best.isupper() == ch.isupper()
+                    and best.lower() != ch.lower()):
+                if confidence[r][c] >= .50:
+                    counts[ch] -= 1
+                ch = best
+                confidence[r][c] = min(float(conf_grid[r][c]), probability)
+                if confidence[r][c] >= .50:
+                    counts[ch] += 1
+            refined[r][c] = ch
+            if ch != original:
+                self.last_refinement_edits.append({
+                    "position": f"{chr(97+c)}{r}", "before": original,
+                    "after": ch, "auxiliary_confidence": probability,
+                })
+        return refined, confidence, "\n".join("".join(row) for row in refined)
 
     def format_fen(self, grid_chars: List[List[str]], active_color: str = 'w') -> str:
         """
         将 10x9 盘面转换为标准中国象棋 FEN 记谱格式
         例如: rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1
         """
-        fen_rows = []
-        for row in grid_chars:
-            row_str = ""
-            empty_count = 0
-            for char in row:
-                if char in ['.', 'x']:
-                    empty_count += 1
-                else:
-                    if empty_count > 0:
-                        row_str += str(empty_count)
-                        empty_count = 0
-                    row_str += char
-            if empty_count > 0:
-                row_str += str(empty_count)
-            fen_rows.append(row_str)
-
-        board_fen = "/".join(fen_rows)
-        full_fen = f"{board_fen} {active_color} - - 0 1"
-        return full_fen
+        from localization.vision_contract import grid_to_fen
+        if active_color not in ('w','b'):raise ValueError('FEN side must be w or b')
+        return grid_to_fen(grid_chars,active_color=='w')
 
     @staticmethod
     def _create_annular_kernel(radius: float = 16.5, thickness: float = 2.0, size: int = 41) -> np.ndarray:
@@ -509,129 +456,25 @@ class ChessRecognizer:
         norm_ring = ring / (np.sum(ring) + 1e-6)
         return norm_ring
 
-    def detect_piece_offsets(self, warped_bgr: np.ndarray, grid_chars: List[List[str]],
-                             board_width_mm: float = 276.0,
-                             board_height_mm: float = 307.0) -> Dict[str, Dict]:
-        """
-        亚像素棋子圆心定位与毫米级物理偏置测量算法
-        结合实测棋盘物理尺寸 (276x307mm)，输出每枚棋子的理论网格中心、
-        视觉实测圆心、图像像素偏差以及机械臂坐标系下的毫米物理补偿矢量。
-        """
-        padding = 50.0
-        cell_w = 350.0 / 8.0
-        cell_h = 400.0 / 9.0
-
-        # 毫米/像素比率
-        K_x = board_width_mm / 350.0
-        K_y = board_height_mm / 400.0
-
-        gray = cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (3, 3), 0)
-        gx = cv2.Sobel(blur, cv2.CV_32F, 1, 0, ksize=3)
-        gy = cv2.Sobel(blur, cv2.CV_32F, 0, 1, ksize=3)
-        edge_mag = np.sqrt(gx**2 + gy**2)
-
-        # 预计算环形核
-        kernels = {r: self._create_annular_kernel(radius=r, thickness=2.0, size=41) for r in [15.5, 16.5, 17.5]}
-
-        col_chars = "abcdefghi"
-        piece_offsets = {}
-
-        for r in range(10):
-            for c in range(9):
-                char = grid_chars[r][c]
-                if char in ['.', 'x']:
-                    continue
-
-                pos_str = f"{col_chars[c]}{r}"
-                cx_nom = padding + c * cell_w
-                cy_nom = padding + r * cell_h
-
-                cx_i = int(round(cx_nom))
-                cy_i = int(round(cy_nom))
-
-                # 局部 50x50 搜索窗口
-                x1 = max(0, cx_i - 25)
-                x2 = min(warped_bgr.shape[1], cx_i + 25)
-                y1 = max(0, cy_i - 25)
-                y2 = min(warped_bgr.shape[0], cy_i + 25)
-                patch_mag = edge_mag[y1:y2, x1:x2]
-
-                local_cx_nom = cx_nom - x1
-                local_cy_nom = cy_nom - y1
-
-                best_score = -1e9
-                best_subpix = (float(local_cx_nom), float(local_cy_nom))
-                best_r = 16.5
-                search_dist = 10.0
-
-                for radius_val, kernel in kernels.items():
-                    resp = cv2.filter2D(patch_mag, -1, kernel)
-                    rx_min = max(0, int(round(local_cx_nom - search_dist)))
-                    rx_max = min(patch_mag.shape[1], int(round(local_cx_nom + search_dist + 1)))
-                    ry_min = max(0, int(round(local_cy_nom - search_dist)))
-                    ry_max = min(patch_mag.shape[0], int(round(local_cy_nom + search_dist + 1)))
-
-                    roi_resp = resp[ry_min:ry_max, rx_min:rx_max]
-                    min_v, max_v, min_loc, max_loc = cv2.minMaxLoc(roi_resp)
-
-                    if max_v > best_score:
-                        best_score = max_v
-                        best_r = radius_val
-                        peak_x = rx_min + max_loc[0]
-                        peak_y = ry_min + max_loc[1]
-
-                        # 亚像素二次抛物面极值拟合
-                        if 1 <= peak_x < patch_mag.shape[1] - 1 and 1 <= peak_y < patch_mag.shape[0] - 1:
-                            dx = (resp[peak_y, peak_x + 1] - resp[peak_y, peak_x - 1]) / 2.0
-                            dy = (resp[peak_y + 1, peak_x] - resp[peak_y - 1, peak_x]) / 2.0
-                            dxx = resp[peak_y, peak_x + 1] - 2 * resp[peak_y, peak_x] + resp[peak_y, peak_x - 1]
-                            dyy = resp[peak_y + 1, peak_x] - 2 * resp[peak_y, peak_x] + resp[peak_y - 1, peak_x]
-
-                            sub_x = peak_x - (dx / dxx) if abs(dxx) > 1e-4 else float(peak_x)
-                            sub_y = peak_y - (dy / dyy) if abs(dyy) > 1e-4 else float(peak_y)
-
-                            sub_x = np.clip(sub_x, peak_x - 0.5, peak_x + 0.5)
-                            sub_y = np.clip(sub_y, peak_y - 0.5, peak_y + 0.5)
-                            best_subpix = (float(sub_x), float(sub_y))
-                        else:
-                            best_subpix = (float(peak_x), float(peak_y))
-
-                u_det = x1 + best_subpix[0]
-                v_det = y1 + best_subpix[1]
-
-                # 偏置量
-                du = u_det - cx_nom
-                dv = v_det - cy_nom
-
-                # 棋盘图像坐标系下的毫米偏差 (X向右为正, Y向下为正)
-                board_dx_mm = du * K_x
-                board_dy_mm = dv * K_y
-
-                # 机械臂第一视角坐标系下的毫米物理补偿:
-                # 机械臂在黑方底线外正后方，a列在最右侧(X为正)，i列在最左侧(X为负)
-                # 图像向右偏(向i列偏) -> 机械臂X应向负方向补偿 (robot_dx = -board_dx)
-                # 图像向下偏(向远端红方偏) -> 机械臂Y应向远端正方向补偿 (robot_dy = +board_dy)
-                robot_dx_mm = -board_dx_mm
-                robot_dy_mm = +board_dy_mm
-
-                dist_mm = np.sqrt(board_dx_mm**2 + board_dy_mm**2)
-
-                piece_offsets[pos_str] = {
-                    "cell": (r, c),
-                    "pos_str": pos_str,
-                    "char": char,
-                    "nominal_px": (round(cx_nom, 1), round(cy_nom, 1)),
-                    "detected_px": (round(u_det, 2), round(v_det, 2)),
-                    "delta_px": (round(du, 2), round(dv, 2)),
-                    "board_offset_mm": (round(board_dx_mm, 2), round(board_dy_mm, 2)),
-                    "robot_offset_mm": (round(robot_dx_mm, 2), round(robot_dy_mm, 2)),
-                    "radius_px": round(best_r, 1),
-                    "offset_dist_mm": round(dist_mm, 2),
-                    "confidence": round(float(best_score), 1)
-                }
-
-        return piece_offsets
+    def detect_piece_offsets(self, warped_bgr, grid_chars, board_width_mm=None,
+                             board_height_mm=None, *, calibration=None, frame_id=-1,
+                             captured_at=None, positions=None):
+        """Quality-gated pixel centers; physical readiness is explicit per entry."""
+        from dataclasses import replace
+        from localization.offset_measurement import CenterMeasurer, VisionCalibration
+        from localization.vision_contract import validate_grid
+        grid=validate_grid(grid_chars,allow_unknown=True)
+        uncertain=any(ch=='x' for row in grid for ch in row)
+        measurable=[[('.' if ch=='x' else ch) for ch in row] for row in grid]
+        cal=calibration or VisionCalibration.from_config()
+        if board_width_mm is not None:cal=replace(cal,width_mm=board_width_mm,columns_mm=())
+        if board_height_mm is not None:cal=replace(cal,height_mm=board_height_mm,rows_mm=())
+        result=CenterMeasurer(cal).measure(warped_bgr,measurable,frame_id=frame_id,
+                                         captured_at=captured_at,positions=positions)
+        if uncertain:
+            for info in result.values():
+                info.update(valid=False,control_valid=False,reason='Uncertain board classification')
+        return result
 
     def visualize_board(self, warped_bgr: np.ndarray, grid_chars: List[List[str]],
                         conf_grid: List[List[float]],
@@ -661,7 +504,7 @@ class ChessRecognizer:
                 color = (0, 0, 220) if is_red else (0, 180, 0)
                 text = f"{char}"
 
-                if piece_offsets and pos_str in piece_offsets:
+                if piece_offsets and pos_str in piece_offsets and piece_offsets[pos_str].get("valid", False):
                     info = piece_offsets[pos_str]
                     u_det, v_det = info["detected_px"]
                     r_px = int(round(info["radius_px"]))
@@ -693,10 +536,10 @@ class ChessRecognizer:
 
     def classify_board_smoothed(self, warped_bgr: np.ndarray, window_size: int = 3) -> Tuple[List[List[str]], List[List[float]], str]:
         """
-        使用多帧滑动窗口平滑的分类器接口 (滤除单帧偶发瞬时抖动，达到 100% 稳定性)
+        使用多帧滑动窗口平滑的分类器接口 (仅平滑概率，不提供物理帧新鲜度保证)
         """
         # 先执行单帧推理（会自动写入 recent_logits_buffer）
-        self.classify_board(warped_bgr)
+        raw_grid, _, _ = self.classify_board(warped_bgr)
 
         # 获取最近 N 帧平均 logits
         recent = self.recent_logits_buffer[-window_size:]
@@ -708,6 +551,10 @@ class ChessRecognizer:
         short_chars = [self.label_2_short[self.classes_labels[idx]] for idx in best_idx]
         grid_chars = [short_chars[i * 9:(i + 1) * 9] for i in range(10)]
         conf_grid = [conf[i * 9:(i + 1) * 9].tolist() for i in range(10)]
+
+        for r in range(10):
+            for c in range(9):
+                if raw_grid[r][c]=='x':grid_chars[r][c]='x';conf_grid[r][c]=0.
 
         if self.enable_physics_refine:
             grid_chars, conf_grid, layout_str = self.refine_with_physics_and_rules(warped_bgr, grid_chars, conf_grid)
@@ -727,6 +574,15 @@ class ChessRecognizer:
         t0 = time.time()
         corners, corner_scores = self.predict_corners(image_bgr)
         t_corner = time.time() - t0
+        from localization.live_vision import geometry_reason, grid_reason
+        geometry_rejection=geometry_reason(corners,corner_scores,image_bgr.shape)
+        if geometry_rejection:
+            return dict(corners=np.asarray(corners).tolist(),corner_scores=np.asarray(corner_scores).tolist(),
+                grid_chars=[['x']*9 for _ in range(10)],conf_grid=[[0.]*9 for _ in range(10)],
+                layout_str='\n'.join(['x'*9]*10),fen='',piece_offsets={},warped_image=None,
+                visualized_board=image_bgr.copy(),debug_visualization=image_bgr.copy(),
+                rejection=geometry_rejection,stable=False,control_ready=False,
+                timing=dict(corner_ms=t_corner*1000,classify_ms=0.,offset_ms=0.,total_ms=(time.time()-t0)*1000))
 
         t1 = time.time()
         warped, M = self.warp_chessboard(image_bgr, corners)
@@ -740,7 +596,8 @@ class ChessRecognizer:
         piece_offsets = self.detect_piece_offsets(warped, grid_chars)
         t_offset = time.time() - t_offset_start
 
-        fen = self.format_fen(grid_chars)
+        rejection=grid_reason(grid_chars,conf_grid,None)
+        fen = self.format_fen(grid_chars) if not rejection else ""
         vis_board = self.visualize_board(warped, grid_chars, conf_grid, piece_offsets=piece_offsets)
         total_time = time.time() - t0
 
@@ -760,6 +617,7 @@ class ChessRecognizer:
         try:
             M_inv = np.linalg.inv(M)
             for pos_str, info in piece_offsets.items():
+                if not info.get("valid"):continue
                 u_d, v_d = info["detected_px"]
                 cx_n, cy_n = info["nominal_px"]
 
@@ -777,6 +635,9 @@ class ChessRecognizer:
             pass
 
         return {
+            "rejection": rejection,
+            "stable": False,
+            "control_ready": False,
             "corners": corners.tolist(),
             "corner_scores": corner_scores.tolist(),
             "grid_chars": grid_chars,

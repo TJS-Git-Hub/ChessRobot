@@ -4,6 +4,8 @@ A 4-DOF Chinese chess robot with camera-based perception and electromagnetic pic
 
 [简体中文](README_ZH.md) · **English** · [日本語](README_JA.md)
 
+> **Vision candidate: `v2.3.0-vision-offline-rc.1` (2026-11-05).** Gen4 observation, game-state synchronization and fresh-frame action verification passed 180 offline tests. Status: **CONDITIONAL**; physical calibration and camera/arm validation are pending. Observation is the default. [Version notes](docs/releases/v2.3.0-vision-offline-rc.1.md) · [Runbook (Chinese)](docs/vision-readiness.zh-CN.md). The course-prototype descriptions below document the earlier physical system.
+
 **Explore the implementation:** [Vision](docs/technical-notes.en.md#vision-history) · [Motion control](docs/technical-notes.en.md#motion-hardware) · [Game decision](docs/technical-notes.en.md#game-decision) · [Mathematical models](docs/technical-notes.en.md#mathematical-models) · [Hardware gallery](docs/technical-notes.en.md#hardware-gallery) · [Setup](docs/setup.en.md)
 
 ChessRobot, also called “智弈·灵手”, is a team-built undergraduate robotics project. An overhead camera detects human moves, a software board selects a response, and a four-joint arm transfers magnetic pieces. The project explores how perception, game state, and physical actuation can work together on a small desktop board.

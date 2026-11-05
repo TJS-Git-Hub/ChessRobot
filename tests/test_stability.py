@@ -96,8 +96,10 @@ class Tests(unittest.TestCase):
         cls=extract('main.py','ChessRobotOrchestrator',scope);o=cls.__new__(cls)
         o.board=self.board();o.board.red_turn=False;o.board.board[1][0]=('black','ju')
         o.ai=types.SimpleNamespace(get_best_move=lambda:'0102')
-        o.arm=types.SimpleNamespace(pick_and_place=lambda *a:(_ for _ in ()).throw(RuntimeError('driver failed')),request_stop=lambda:None)
-        o.vision=types.SimpleNamespace(suppress_detection=False,reset_baseline=lambda n:None)
+        o.observation_only=False;o.pickup_timeout=1.;o.enable_hardware=False
+        o.arm=types.SimpleNamespace(pick_and_place=lambda *a,**k:(_ for _ in ()).throw(RuntimeError('driver failed')),request_stop=lambda:None)
+        o.vision=types.SimpleNamespace(prepare_action=lambda *a,**k:{'offsets':{'a1':(0.,0.)}},clock=lambda:0.,
+            session=types.SimpleNamespace(invalidate=lambda reason:None))
         o.stop_event=threading.Event();o.piece_count=3
         scope['Coord']=extract('main.py','Coord',{})
         before=copy.deepcopy(o.board.board)

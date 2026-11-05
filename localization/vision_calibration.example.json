@@ -1,0 +1,17 @@
+{
+  "width_mm": 276.0,
+  "height_mm": 307.0,
+  "piece_diameter_mm": 25.0,
+  "robot_from_board": [[-1.0, 0.0], [0.0, 1.0]],
+  "calibrated": false,
+  "calibration_id": "EXAMPLE-UNVERIFIED-COPY-AND-MEASURE",
+  "columns_mm": [],
+  "rows_mm": [],
+  "max_offset_mm": 8.0,
+  "camera_matrix": [],
+  "distortion": [],
+  "image_size": [],
+  "camera_height_mm": null,
+  "piece_height_mm": null,
+  "camera_center_board_mm": []
+}

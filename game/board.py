@@ -236,6 +236,36 @@ class ChessBoard:
         with self._lock:
             return [row[:] for row in self.board]
 
+    def load_vision_grid(self, grid, red_turn=True):
+        """Explicit initialization from an observed position; no opening reset.
+
+        Vision may display any arrangement. Continuing a game additionally
+        requires rule-consistent pieces and a known side to move.
+        """
+        from localization.vision_contract import grid_to_board, validate_grid
+        from collections import Counter
+        grid=validate_grid(grid)
+        counts=Counter(ch for row in grid for ch in row)
+        limits=dict(zip('KABNRCPkabnrcp',(1,2,2,2,2,2,5)*2))
+        if counts['K']!=1 or counts['k']!=1 or any(counts[ch]>n for ch,n in limits.items()):
+            raise ValueError('A playable position needs both kings and legal piece counts')
+        for r,row in enumerate(grid):
+            for c,ch in enumerate(row):
+                rr=9-r if ch.isupper() else r
+                if ch.lower()=='k' and not (0<=rr<=2 and 3<=c<=5):raise ValueError('King outside palace')
+                if ch.lower()=='a' and (rr,c) not in {(0,3),(0,5),(1,4),(2,3),(2,5)}:raise ValueError('Advisor outside legal squares')
+                if ch.lower()=='b' and (rr,c) not in {(0,2),(0,6),(2,0),(2,4),(2,8),(4,2),(4,6)}:raise ValueError('Elephant outside legal squares')
+                if ch.lower()=='p' and not (rr>=5 or (rr in (3,4) and c%2==0)):raise ValueError('Pawn outside reachable squares')
+        with self._lock:
+            old,turn=self.board,self.red_turn
+            self.board=grid_to_board(grid);self.red_turn=bool(red_turn)
+            try:
+                if self.is_in_check(not self.red_turn):raise ValueError('The side that just moved remains in check')
+            except Exception:
+                self.board,self.red_turn=old,turn
+                raise
+            self.move_history=[]
+
     def is_move_valid(self, move_str: str) -> bool:
         with self._lock:
             return self._validate_move(move_str)

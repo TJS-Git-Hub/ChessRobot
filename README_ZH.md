@@ -4,6 +4,8 @@
 
 **简体中文** · [English](README.md) · [日本語](README_JA.md)
 
+> **视觉候选版：`v2.3.0-vision-offline-rc.1`（2026-11-05）。** 第四代的观察、棋局同步和动作后新帧复核已通过 180 项离线测试，状态为 **CONDITIONAL**，仍需实物标定及相机/机械臂验证。默认仅观察。[版本说明](docs/releases/v2.3.0-vision-offline-rc.1.md) · [启动与验收手册](docs/vision-readiness.zh-CN.md)。下文的课程原型描述保留此前实机系统的历史边界。
+
 **深入阅读：** [视觉感知](docs/technical-notes.zh-CN.md#vision-history) · [运动控制](docs/technical-notes.zh-CN.md#motion-hardware) · [棋局决策](docs/technical-notes.zh-CN.md#game-decision) · [数学模型](docs/technical-notes.zh-CN.md#mathematical-models) · [实机图集](docs/technical-notes.zh-CN.md#hardware-gallery) · [部署操作](docs/setup.zh-CN.md)
 
 ChessRobot，又名“智弈·灵手”，是由四人团队完成的本科机器人课程项目。俯视摄像头检测人类走棋，软件棋盘选择应手，四关节机械臂通过电磁铁搬运棋子。项目探索了视觉感知、棋局状态与实体运动在桌面场景中的协同。

@@ -5,13 +5,19 @@ import threading
 import queue
 import cv2
 import numpy as np
+# Load inference runtimes before Qt on Windows (Qt-first caused native DLL failures).
+_hardware_gui = '--mode=hardware' in sys.argv or any(
+    sys.argv[i]=='--mode' and sys.argv[i+1]=='hardware' for i in range(len(sys.argv)-1))
+if _hardware_gui:
+    from game.ai import ChessAI as _preload_ai
+from main import ChessRobotOrchestrator, Coord
+
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTextEdit, QPushButton, QLabel, QGridLayout, QFrame)
 from PyQt5.QtCore import pyqtSignal, QObject, Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap, QFont
 
 # 导入你现有的模块
-from main import ChessRobotOrchestrator, Coord
 
 # ============================================================
 # 1. 信号中转站
@@ -44,10 +50,12 @@ class LogRedirector:
 # 2. UI 主界面
 # ============================================================
 class ChessRobotUI(QMainWindow):
-    def __init__(self, model_path):
+    def __init__(self, model_path=None, engine_options=None):
         super().__init__()
         self.comm = UiComm()
         self.model_path = model_path
+        self.engine_options = engine_options or {}
+        self._cancel_start = threading.Event()
         
         # 初始化 UI
         self.setWindowTitle("UESTC 象棋机器人控制台 v2.0")
@@ -60,8 +68,10 @@ class ChessRobotUI(QMainWindow):
         self.comm.log_signal.connect(self.update_log)
         self.comm.video_signal.connect(self.update_video)
         self.comm.board_signal.connect(self.draw_board)
+        self.comm.status_signal.connect(self.status_box.setText)
         
         # 接管系统日志
+        self._original_stdout = sys.stdout
         sys.stdout = LogRedirector(self.comm.log_signal)
         
         # 启动后端引擎线程
@@ -106,6 +116,7 @@ class ChessRobotUI(QMainWindow):
         # 按钮区
         btn_layout = QHBoxLayout()
         self.start_btn = QPushButton("开始对弈")
+        if self.engine_options.get('observation_only',True):self.start_btn.setText('开始视觉观察')
         self.start_btn.setMinimumHeight(50)
         self.start_btn.setStyleSheet("background-color: #4CAF50; font-weight: bold;")
         self.start_btn.clicked.connect(self.start_logic)
@@ -134,7 +145,7 @@ class ChessRobotUI(QMainWindow):
         if hasattr(self, 'orchestrator') and self.orchestrator.vision:
             vision = self.orchestrator.vision
             # 如果处于标定阶段 (点数没满 4 个)
-            if len(vision.roi_corners) < 4:
+            if hasattr(vision,'roi_corners') and len(vision.roi_corners) < 4:
                 if self._video_mapping is None:
                     return
                 left, top, pw, ph, fw, fh = self._video_mapping
@@ -163,42 +174,63 @@ class ChessRobotUI(QMainWindow):
     def run_engine(self):
         """下棋机器人后端线程"""
         try:
-            self.orchestrator = ChessRobotOrchestrator(self.model_path)
+            self.orchestrator = ChessRobotOrchestrator(self.model_path, **self.engine_options)
+            if self._cancel_start.is_set():
+                self.orchestrator.shutdown()
+                return
             # 劫持视觉输出到 UI 信号
             self.orchestrator.vision.ui_callback = self.comm.video_signal.emit
             
             # 开启循环监听棋盘更新（定时信号）
             def poll_board():
                 while not self.orchestrator.stop_event.is_set():
-                    self.comm.board_signal.emit(self.orchestrator.board.snapshot())
+                    snapshot = (self.orchestrator.vision.get_snapshot()
+                                if hasattr(self.orchestrator.vision,'get_snapshot') else None)
+                    if self.orchestrator.observation_only:
+                        from localization.vision_contract import grid_to_board
+                        board = grid_to_board(snapshot['grid_chars']) if snapshot is not None else [[None]*9 for _ in range(10)]
+                    else:
+                        board = self.orchestrator.board.snapshot()
+                    self.comm.board_signal.emit(board)
+                    if hasattr(self.orchestrator.vision,'session'):
+                        session=self.orchestrator.vision.session
+                        self.comm.status_signal.emit(('可信视觉观察（无动作）: ' if snapshot is not None else '视觉待确认（无动作）: ')+session.reason
+                            if self.orchestrator.observation_only else session.mode+': '+session.reason)
                     time.sleep(0.5)
             threading.Thread(target=poll_board, daemon=True).start()
 
             self.orchestrator.run()
         except Exception as e:
             print(f"❌ 引擎线程崩溃: {e}")
+            self.comm.status_signal.emit('系统已停止: '+str(e))
         finally:
             if hasattr(self, 'orchestrator'):
                 self.orchestrator.shutdown()
+                if self.orchestrator.error:self.comm.status_signal.emit('系统已停止: '+self.orchestrator.error)
 
     def start_logic(self):
-        if not self.engine_thread.is_alive():
+        if not self._cancel_start.is_set() and not self.engine_thread.is_alive():
             self.engine_thread.start()
             self.status_box.setText("系统状态: 正在运行")
             self.start_btn.setEnabled(False)
 
     def emergency_stop(self):
+        self._cancel_start.set()
         print("🚨 急停信号发出！")
         if hasattr(self, 'orchestrator'):
             self.orchestrator.stop_event.set()
-            self.orchestrator.arm.request_stop()
-            self.orchestrator.vs.stop()
+            if self.orchestrator.arm is not None:self.orchestrator.arm.request_stop()
+            self.orchestrator.vision.stopped=True
+            if hasattr(self.orchestrator.vision,'close'):self.orchestrator.vision.close()
+            if hasattr(self.orchestrator.vs,'close'):self.orchestrator.vs.close()
+            else:self.orchestrator.vs.stop()
         self.status_box.setText("系统状态: 已请求停止，请检查实物后重新启动")
 
     def closeEvent(self, event):
         self.emergency_stop()
         if self.engine_thread.is_alive():
             self.engine_thread.join(timeout=2.0)
+        sys.stdout = self._original_stdout
         event.accept()
 
     # ============================================================
@@ -245,18 +277,31 @@ class ChessRobotUI(QMainWindow):
         if event.key() == Qt.Key_Space:
             if hasattr(self, 'orchestrator'):
                 print("🚀 [UI快捷键] 收到空格信号 -> 触发视觉检测")
-                self.orchestrator.vision.force_detect_move = True
+                if hasattr(self.orchestrator.vision,'force_detect_move'):
+                    self.orchestrator.vision.force_detect_move = True
         elif event.key() == Qt.Key_1:
-             if hasattr(self, 'orchestrator'): self.orchestrator.vision.set_black_view(1)
+             if hasattr(self, 'orchestrator') and hasattr(self.orchestrator.vision,'set_black_view'): self.orchestrator.vision.set_black_view(1)
         elif event.key() == Qt.Key_2:
-             if hasattr(self, 'orchestrator'): self.orchestrator.vision.set_black_view(2)
+             if hasattr(self, 'orchestrator') and hasattr(self.orchestrator.vision,'set_black_view'): self.orchestrator.vision.set_black_view(2)
 
 if __name__ == "__main__":
-    # 获取路径
-    B_DIR = os.path.dirname(os.path.abspath(__file__))
-    M_PATH = os.path.join(B_DIR, "recognition", "models", "best.pt")
-
-    app = QApplication(sys.argv)
-    ui = ChessRobotUI(M_PATH)
+    import argparse
+    from localization.offset_measurement import VisionCalibration
+    parser=argparse.ArgumentParser(description='Gen4 GUI; observation only by default')
+    parser.add_argument('--mode',choices=['observe','hardware'],default='observe')
+    parser.add_argument('--camera',type=int,default=2)
+    parser.add_argument('--hand-model')
+    parser.add_argument('--calibration')
+    parser.add_argument('--legacy-pt',action='store_true')
+    parser.add_argument('--initialize-from-vision',action='store_true')
+    parser.add_argument('--turn',choices=['red','black'],default='red')
+    args=parser.parse_args()
+    if not args.legacy_pt and not args.hand_model:parser.error('--hand-model is required')
+    cal=VisionCalibration.load(args.calibration) if args.calibration else VisionCalibration.from_config()
+    model=os.path.join(os.path.dirname(__file__),'recognition','models','best.pt') if args.legacy_pt else None
+    app=QApplication([sys.argv[0]])
+    ui=ChessRobotUI(model,dict(enable_hardware=args.mode=='hardware',observation_only=args.mode=='observe',
+        calibration=cal,hand_model=args.hand_model,camera_index=args.camera,
+        initialize_from_vision=args.initialize_from_vision,red_turn=args.turn=='red'))
     ui.show()
     sys.exit(app.exec_())

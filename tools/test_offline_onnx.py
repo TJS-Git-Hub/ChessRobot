@@ -10,6 +10,8 @@ import os
 import sys
 import argparse
 import time
+from pathlib import Path
+from datetime import datetime
 import numpy as np
 import cv2
 
@@ -41,10 +43,17 @@ def print_ascii_board(grid_chars):
 
 def main():
     parser = argparse.ArgumentParser(description="ChessRobot 离线 ONNX 两阶段识别测试")
-    parser.add_argument("--image", type=str, default="", help="待测试的棋盘图片路径")
-    parser.add_argument("--dummy", action="store_true", help="使用合成图像验证模型计算")
-    parser.add_argument("--cam", action="store_true", help="调用摄像头拍照测试")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--image", type=str, default="", help="待测试的棋盘图片路径")
+    modes.add_argument("--dummy", action="store_true", help="仅验证合成图前向计算，不计算准确率")
+    modes.add_argument("--cam", action="store_true", help="调用摄像头拍照测试")
+    parser.add_argument("--camera-index", type=int, default=0)
+    parser.add_argument("--output-dir", type=Path, default=Path.home()/".codex/cache/tasks/chessrobot-image"/datetime.now().strftime("%Y%m%d_%H%M%S"))
     args = parser.parse_args()
+    if args.image and not Path(args.image).is_file():
+        parser.error(f"图片不存在: {args.image}")
+    if args.output_dir.resolve().is_relative_to(Path(project_root)):
+        parser.error("输出目录应在项目外")
 
     print("🚀 [1/3] 正在加载 ChessRecognizer ONNX 模型...")
     recognizer = ChessRecognizer()
@@ -56,26 +65,31 @@ def main():
     img = None
     source_name = ""
 
-    if args.image and os.path.exists(args.image):
+    if args.image:
         img = cv2.imread(args.image)
+        if img is None:
+            raise ValueError(f"图片无法解码: {args.image}")
         source_name = os.path.basename(args.image)
         print(f"📷 [2/3] 读取指定测试图像: {args.image} ({img.shape[1]}x{img.shape[0]})")
     elif args.cam:
         print("📷 [2/3] 正在调用摄像头拍摄单帧...")
-        cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        ret, frame = cap.read()
-        cap.release()
-        if ret:
+        cap = cv2.VideoCapture(args.camera_index)
+        try:
+            if not cap.isOpened():
+                raise RuntimeError(f"摄像头{args.camera_index}无法打开；停止，不回退样本")
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            ret, frame = cap.read()
+        finally:
+            cap.release()
+        if ret and frame is not None:
             img = frame
             source_name = "camera_snapshot"
             print(f"✅ 摄像头拍摄成功 ({img.shape[1]}x{img.shape[0]})")
         else:
-            print("❌ 无法打开摄像头，切换至 Dummy 模式。")
-            args.dummy = True
+            raise RuntimeError("摄像头没有返回画面；停止，不回退样本或假图")
 
-    if img is None:
+    if img is None and not args.dummy:
         # 尝试查找已采集的样本图片
         sample_dir = os.path.join(project_root, "recognition", "data", "raw_dataset", "indoor_normal")
         if os.path.exists(sample_dir):
@@ -86,8 +100,11 @@ def main():
                 source_name = files[0]
                 print(f"📷 [2/3] 自动发现已采集样本: {sample_path}")
 
+    if img is None and not args.dummy:
+        raise ValueError("未提供有效图片且没有可用样本；请指定 --image，或显式使用 --dummy 仅验证计算")
+
     if img is None:
-        print("ℹ️ 未指定图片且未找到样本，生成 1280x720 纯色虚拟图片以测试模型推理完整性...")
+        print("ℹ️ 生成明确标记的虚拟图片，仅验证前向计算，不评估识别准确率...")
         img = np.full((720, 1280, 3), 200, dtype=np.uint8)
         # 画一个简单的深色方框模拟棋盘
         cv2.rectangle(img, (300, 100), (980, 620), (50, 50, 50), 3)
@@ -110,12 +127,12 @@ def main():
     print_ascii_board(res['grid_chars'])
 
     # 保存可视化调试图像
-    out_dir = os.path.join(project_root, "recognition", "data")
+    out_dir = str(args.output_dir.resolve())
     os.makedirs(out_dir, exist_ok=True)
     out_vis_path = os.path.join(out_dir, f"test_vis_{source_name}.jpg")
     cv2.imwrite(out_vis_path, res['debug_visualization'])
     print(f"💾 可视化角点与检测结果已保存至: {out_vis_path}")
-    print("✅ 离线两阶段识别流程完全畅通！")
+    print("✅ 本次前向推理完成。正确率需要人工真值核对。")
 
 if __name__ == "__main__":
     main()
